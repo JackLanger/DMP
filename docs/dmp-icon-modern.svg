@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="t">
+  <title id="t">DMP – Document Management Platform</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="0.55" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#6366f1" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#c7d2fe" stop-opacity=".85"/>
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+
+  <rect width="256" height="256" rx="64" fill="#0b1020"/>
+  <rect width="256" height="256" rx="64" fill="url(#glow)"/>
+
+  <!-- outer discovery ring -->
+  <circle cx="128" cy="128" r="112" fill="none" stroke="#6366f1" stroke-opacity=".25" stroke-width="1.5" stroke-dasharray="2 8" stroke-linecap="round"/>
+
+  <!-- vault hexagon -->
+  <path id="hex" d="M128 44l72.7 42v84L128 212l-72.7-42V86z" fill="#111836" stroke="url(#g)" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M128 44l72.7 42v84L128 212l-72.7-42V86z" fill="none" stroke="url(#g)" stroke-width="7" stroke-linejoin="round" filter="url(#blur)" opacity=".6"/>
+
+  <!-- mesh links to vertices -->
+  <g stroke="url(#g)" stroke-width="2" opacity=".7">
+    <line x1="128" y1="44" x2="128" y2="22"/>
+    <line x1="200.7" y1="86" x2="222" y2="74"/>
+    <line x1="55.3" y1="170" x2="34" y2="182"/>
+  </g>
+  <g fill="#22d3ee">
+    <circle cx="128" cy="18" r="6"/>
+    <circle cx="226" cy="72" r="6" fill="#6366f1"/>
+    <circle cx="30" cy="184" r="6" fill="#a855f7"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="128" cy="44" r="4"/>
+    <circle cx="200.7" cy="86" r="4"/>
+    <circle cx="200.7" cy="170" r="4"/>
+    <circle cx="128" cy="212" r="4"/>
+    <circle cx="55.3" cy="170" r="4"/>
+    <circle cx="55.3" cy="86" r="4"/>
+  </g>
+
+  <!-- document -->
+  <path d="M106 90h30l22 22v50a4 4 0 0 1-4 4h-48a4 4 0 0 1-4-4v-68a4 4 0 0 1 4-4z" fill="url(#page)"/>
+  <path d="M136 90v18a4 4 0 0 0 4 4h18z" fill="#818cf8"/>
+
+  <!-- semantic constellation on the page -->
+  <g stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M118 136L134 126L146 142L124 152Z"/>
+    <path d="M134 126L124 152"/>
+  </g>
+  <g fill="#0891b2">
+    <circle cx="118" cy="136" r="4"/>
+    <circle cx="134" cy="126" r="4"/>
+    <circle cx="146" cy="142" r="4"/>
+    <circle cx="124" cy="152" r="4"/>
+  </g>
+</svg>
