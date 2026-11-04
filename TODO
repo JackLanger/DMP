@@ -1,0 +1,5 @@
+Front End Portal
+ - name: Portal
+ - Tech Stack:
+    - Backend: Spring/Ktor
+    - Frontend: React tauri (rust) / muss diskutiert werden ggf nur spring + react
