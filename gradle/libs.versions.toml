@@ -8,12 +8,10 @@ spring-cloud = "2026.0.0-SNAPSHOT"
 spring-dependency-management = "1.1.7"
 ulid-creator = "5.2.4"
 gzip = "12.1.14"
-spring-mongo = "5.1.2"
 
 [plugins]
 asciidoctor = { id = "org.asciidoctor.jvm.convert", version.ref = "asciidoctor" }
 dgs-codegen = { id = "com.netflix.dgs.codegen", version.ref = "dgs-codegen" }
-kotlin-jpa = { id = "org.jetbrains.kotlin.plugin.jpa", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf" }
@@ -21,8 +19,8 @@ spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
 
 [libraries]
+spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 gzip = { module = "org.eclipse.jetty.compression:jetty-compression-gzip", version.ref = "gzip" }
-h2 = { module = "com.h2database:h2" }
 jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect" }
@@ -34,71 +32,68 @@ reactor-kotlin-extensions = { module = "io.projectreactor.kotlin:reactor-kotlin-
 spring-boot-configuration-processor = { module = "org.springframework.boot:spring-boot-configuration-processor" }
 spring-boot-devtools = { module = "org.springframework.boot:spring-boot-devtools" }
 spring-boot-docker-compose = { module = "org.springframework.boot:spring-boot-docker-compose" }
-spring-boot-h2console = { module = "org.springframework.boot:spring-boot-h2console" }
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-actuator-test = { module = "org.springframework.boot:spring-boot-starter-actuator-test" }
 spring-boot-starter-cache = { module = "org.springframework.boot:spring-boot-starter-cache" }
 spring-boot-starter-cache-test = { module = "org.springframework.boot:spring-boot-starter-cache-test" }
-spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa" }
-spring-boot-starter-data-jpa-test = { module = "org.springframework.boot:spring-boot-starter-data-jpa-test" }
+spring-boot-starter-data-mongodb = { module = "org.springframework.boot:spring-boot-starter-data-mongodb" }
+spring-boot-starter-data-mongodb-test = { module = "org.springframework.boot:spring-boot-starter-data-mongodb-test" }
 spring-boot-starter-grpc-server = { module = "org.springframework.boot:spring-boot-starter-grpc-server" }
 spring-boot-starter-grpc-server-test = { module = "org.springframework.boot:spring-boot-starter-grpc-server-test" }
-spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
-spring-boot-starter-jdbc-test = { module = "org.springframework.boot:spring-boot-starter-jdbc-test" }
-spring-boot-starter-mongodb = { module = "org.springframework.boot:spring-boot-starter-mongodb" }
-spring-boot-starter-mongodb-test = { module = "org.springframework.boot:spring-boot-starter-mongodb-test" }
+# spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+# spring-boot-starter-jdbc-test = { module = "org.springframework.boot:spring-boot-starter-jdbc-test" }
 spring-boot-starter-restdocs = { module = "org.springframework.boot:spring-boot-starter-restdocs" }
 spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security" }
 spring-boot-starter-security-test = { module = "org.springframework.boot:spring-boot-starter-security-test" }
-spring-boot-starter-session-jdbc = { module = "org.springframework.boot:spring-boot-starter-session-jdbc" }
-spring-boot-starter-session-jdbc-test = { module = "org.springframework.boot:spring-boot-starter-session-jdbc-test" }
+# spring-boot-starter-session-jdbc = { module = "org.springframework.boot:spring-boot-starter-session-jdbc" }
+# spring-boot-starter-session-jdbc-test = { module = "org.springframework.boot:spring-boot-starter-session-jdbc-test" }
 spring-boot-starter-webflux = { module = "org.springframework.boot:spring-boot-starter-webflux" }
 spring-boot-starter-webflux-test = { module = "org.springframework.boot:spring-boot-starter-webflux-test" }
 spring-boot-starter-webservices = { module = "org.springframework.boot:spring-boot-starter-webservices" }
 spring-boot-starter-webservices-test = { module = "org.springframework.boot:spring-boot-starter-webservices-test" }
-spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
-spring-cloud-starter-task = { module = "org.springframework.cloud:spring-cloud-starter-task" }
+# spring-cloud-starter-task = { module = "org.springframework.cloud:spring-cloud-starter-task" }
 spring-restdocs-webtestclient = { module = "org.springframework.restdocs:spring-restdocs-webtestclient" }
-sqlite-jdbc = { module = "org.xerial:sqlite-jdbc" }
+# sqlite-jdbc = { module = "org.xerial:sqlite-jdbc" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-mongodb = { module = "org.testcontainers:testcontainers-mongodb" }
 ulid-creator = { module = "com.github.f4b6a3:ulid-creator", version.ref = "ulid-creator" }
-spring-mongo = { module = "org.springframework.data:spring-data-mongodb", version.ref = "spring-mongo" }
 
 [bundles]
-spring = [
-    "spring-boot-h2console",
+spring-core = [
     "spring-boot-starter-actuator",
     "spring-boot-starter-cache",
-    "spring-boot-starter-data-jpa",
-    "spring-boot-starter-grpc-server",
-    "spring-boot-starter-jdbc",
-    "spring-boot-starter-mongodb",
     "spring-boot-starter-security",
-    "spring-boot-starter-session-jdbc",
     "spring-boot-starter-webflux",
-    "spring-boot-starter-webservices",
     "reactor-kotlin-extensions",
     "kotlin-reflect",
     "kotlinx-coroutines-reactor",
-    "spring-cloud-starter-task",
-    "jackson-module-kotlin",
-    "spring-mongo"
+    "jackson-module-kotlin"
 ]
 
-spring-test = [
+spring-mongo = [
+    "spring-boot-starter-data-mongodb"
+]
+
+spring-other = [
+    "spring-boot-starter-grpc-server",
+    "spring-boot-starter-webservices"
+]
+
+spring-core-test = [
     "spring-boot-starter-actuator-test",
     "spring-boot-starter-cache-test",
-    "spring-boot-starter-data-jpa-test",
-    "spring-boot-starter-grpc-server-test",
-    "spring-boot-starter-jdbc-test",
-    "spring-boot-starter-mongodb-test",
-    "spring-boot-starter-restdocs",
     "spring-boot-starter-security-test",
-    "spring-boot-starter-session-jdbc-test",
-    "spring-boot-starter-webflux-test",
+    "spring-boot-starter-webflux-test"
+]
+
+spring-mongo-test = [
+    "spring-boot-starter-data-mongodb-test"
+]
+
+spring-other-test = [
+    "spring-boot-starter-grpc-server-test",
+    "spring-boot-starter-restdocs",
     "spring-boot-starter-webservices-test",
     "spring-boot-testcontainers",
-    "spring-restdocs-webtestclient",
-    "spring-mongo"
+    "spring-restdocs-webtestclient"
 ]
