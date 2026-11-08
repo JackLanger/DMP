@@ -8,3 +8,5 @@ pluginManagement {
 rootProject.name = "DMP"
 
 include("FileServer")
+
+include("Portal")
