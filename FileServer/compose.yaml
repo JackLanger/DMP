@@ -2,8 +2,22 @@ services:
   mongodb:
     image: 'mongo:latest'
     environment:
-      - 'MONGO_INITDB_DATABASE=mydatabase'
-      - 'MONGO_INITDB_ROOT_PASSWORD=secret'
-      - 'MONGO_INITDB_ROOT_USERNAME=root'
+      - 'MONGO_INITDB_DATABASE=${MONGO_DATABASE}'
+      - 'MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD}'
+      - 'MONGO_INITDB_ROOT_USERNAME=${MONGO_USER}'
     ports:
       - "27017:27017"
+
+  fileserver:
+    image: 'fileserver:latest'
+    build:
+      context: ..
+      dockerfile: FileServer/FileServer.Containerfile
+      args:
+        VERSION: ${VERSION}
+    environment:
+      - 'SPRING_MONGODB_URI=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=admin'
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mongodb

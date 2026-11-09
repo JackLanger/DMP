@@ -12,7 +12,8 @@ plugins {
 }
 
 group = "de.dmp.server"
-version = "0.0.1-SNAPSHOT"
+version = File("FileServer/VERSION").readText().trim()
+val database = "fileserver";
 
 java {
     toolchain {
@@ -99,3 +100,14 @@ tasks.asciidoctor {
     inputs.dir(project.extra["snippetsDir"]!!)
     dependsOn(tasks.test)
 }
+
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    environment(
+        "SPRING_MONGODB_URI",
+        System.getenv("SPRING_MONGODB_URI")
+            ?: "mongodb://root:secret@localhost:27017/$database?authSource=admin"
+    )
+    systemProperty("spring.profiles.active", "dev")
+}
+
+tasks.jar { enabled = false }
