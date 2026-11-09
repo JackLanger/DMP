@@ -1,6 +1,12 @@
 spring:
+
   application:
     name: FileServer
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/dmp
+
+  mongodb:
+    uri: ${SPRING_MONGODB_URI:mongodb://localhost:27017/dmp}
+
+  security:
+    user:
+      name: dev
+#      password: ${FILESERVER_PASSWORD:change-me}
