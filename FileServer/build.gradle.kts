@@ -37,6 +37,7 @@ dependencies {
     implementation(libs.bundles.spring.mongo)
     implementation(libs.bundles.spring.other)
 
+    implementation(libs.yaml)
     implementation(libs.ulid.creator)
     implementation(libs.gzip)
 
@@ -108,6 +109,7 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
             ?: "mongodb://root:secret@localhost:27017/$database?authSource=admin"
     )
     systemProperty("spring.profiles.active", "dev")
+    systemProperty("spring.docker.compose.enabled", "false")
 }
 
 tasks.jar { enabled = false }

@@ -22,4 +22,4 @@ services:
     depends_on:
       - mongodb
     volumes:
-        - ./FileServer/data:/data
+      - ./FileServer/data:/data

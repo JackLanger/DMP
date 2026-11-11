@@ -1,6 +1,7 @@
 package de.dmp.server.controller;
 
 
+import de.dmp.server.configuration.Archive;
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.service.MetadataService;
 import lombok.extern.slf4j.Slf4j;
@@ -36,20 +37,14 @@ public class FileController {
 
 	private final MetadataService metadataService;
 
-	private final Path uploadDir;
+	private final Archive archive;
 
 
 	@Autowired
-	public FileController(MetadataService metadataService) {
-
-		this(metadataService, Path.of("e:/FileServer")); // TODO replace with configuration bean
-	}
-
-
-	FileController(MetadataService metadataService, Path uploadDir) {
+	public FileController(MetadataService metadataService, Archive archive) {
 
 		this.metadataService = metadataService;
-		this.uploadDir = uploadDir;
+		this.archive = archive;
 	}
 
 
@@ -105,8 +100,9 @@ public class FileController {
 		if (metadata.isEmpty()) return ResponseEntity.notFound()
 		                                             .build();
 
-		final Path root = uploadDir.toAbsolutePath()
-		                           .normalize();
+		final Path root = archive.getUploadDir()
+		                         .toAbsolutePath()
+		                         .normalize();
 		final Path archive = root.resolve("%s.zip".formatted(metadata.get()
 		                                                             .fileLocation()))
 		                         .normalize();
@@ -180,17 +176,19 @@ public class FileController {
 
 		final String storageKey = UUID.randomUUID()
 		                              .toString(); // don't use the client filename as a path
-		final Path destination = uploadDir.resolve("tmp%s".formatted(storageKey));
-		final Path archive = uploadDir.resolve("%s.zip".formatted(storageKey));
+		final Path destination = archive.getUploadDir()
+		                                .resolve("tmp%s".formatted(storageKey));
+		final Path archivePath = archive.getUploadDir()
+		                                .resolve("%s.zip".formatted(storageKey));
 
 		final AtomicBoolean persisting = new AtomicBoolean();
 		final Runnable zipAndPersist = () -> {
 			persisting.set(true);
 			try {
-				new Zip(destination, archive).run();
-				new CreateOrUpdateFileEntry(file, metadata, storageKey, metadataService, uploadDir).run();
+				new Zip(destination, archivePath).run();
+				new CreateOrUpdateFileEntry(file, metadata, storageKey, metadataService, archive.getUploadDir()).run();
 			} catch (RuntimeException ex) {
-				deleteArchive(uploadDir, storageKey);
+				deleteArchive(archive.getUploadDir(), storageKey);
 				throw ex;
 			} finally {
 				deleteTempFile(destination);
@@ -229,7 +227,7 @@ public class FileController {
 				metadataService.create(replacement);
 			}
 
-			existing.ifPresent(old -> deleteArchive(uploadDir, old.fileLocation()));
+			existing.ifPresent(old -> deleteArchive(uploadDir(), old.fileLocation()));
 		}
 
 	}

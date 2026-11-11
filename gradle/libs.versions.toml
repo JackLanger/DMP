@@ -8,6 +8,7 @@ spring-cloud = "2026.0.0-SNAPSHOT"
 spring-dependency-management = "1.1.7"
 ulid-creator = "5.2.4"
 gzip = "12.1.14"
+yaml = "3.1.8"
 
 [plugins]
 asciidoctor = { id = "org.asciidoctor.jvm.convert", version.ref = "asciidoctor" }
@@ -18,7 +19,10 @@ protobuf = { id = "com.google.protobuf", version.ref = "protobuf" }
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
 spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
 
+
 [libraries]
+# yaml = { module = "org.yaml:snakeyaml", version.ref = "yaml" }
+yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml", version.ref = "yaml" }
 spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-testcontainers" }
 gzip = { module = "org.eclipse.jetty.compression:jetty-compression-gzip", version.ref = "gzip" }
 jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
@@ -58,7 +62,16 @@ testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-jun
 testcontainers-mongodb = { module = "org.testcontainers:testcontainers-mongodb" }
 ulid-creator = { module = "com.github.f4b6a3:ulid-creator", version.ref = "ulid-creator" }
 
+
 [bundles]
+yaml = [
+    "yaml"
+]
+
+json = [
+    "jackson-module-kotlin"
+]
+
 spring-core = [
     "spring-boot-starter-actuator",
     "spring-boot-starter-cache",
