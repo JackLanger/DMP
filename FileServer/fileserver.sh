@@ -21,16 +21,17 @@ function run() {
   cd "$SCRIPT_DIR" || return 1
 
   if command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -f compose.yaml up -d
+    docker-compose -f compose.yaml up --remove-orphans  -d
   elif command -v docker >/dev/null 2>&1; then
-    docker compose -f compose.yaml up -d
+    docker compose -f compose.yaml up --remove-orphans  -d
   elif command -v podman-compose >/dev/null 2>&1; then
-    podman-compose -f compose.yaml up -d
+    podman-compose -f compose.yaml up --remove-orphans  -d
   else
     echo "No Docker Compose tool found" >&2
     return 1
   fi
 }
+
 
 ## Main script execution
 case "$1" in
