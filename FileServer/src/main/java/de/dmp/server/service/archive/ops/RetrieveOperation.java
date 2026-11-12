@@ -5,6 +5,8 @@ import de.dmp.server.service.archive.ArchiveContext;
 import de.dmp.server.service.archive.ArchivedFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -16,7 +18,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 @Slf4j
-public record RetrieveOperation(MetadataDto metadata) implements ArchiveOperation<Optional<ArchivedFile>> {
+public record RetrieveOperation(MetadataDto metadata) implements ArchiveOperation<ArchivedFile> {
 
 	private static InputStream openEntry(Path archive, String entryName) throws IOException {
 
@@ -49,7 +51,13 @@ public record RetrieveOperation(MetadataDto metadata) implements ArchiveOperatio
 	}
 
 	@Override
-	public Optional<ArchivedFile> execute(ArchiveContext context) throws IOException {
+	public Mono<ArchivedFile> execute(ArchiveContext context, Scheduler scheduler) {
+		return Mono.fromCallable(() -> retrieve(context))
+				.subscribeOn(scheduler)
+				.flatMap(Mono::justOrEmpty);
+	}
+
+	private Optional<ArchivedFile> retrieve(ArchiveContext context) throws IOException {
 
 		Path archive = context.archivePath(metadata.fileLocation());
 		if (!Files.isRegularFile(archive)) {

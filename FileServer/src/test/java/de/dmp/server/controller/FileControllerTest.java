@@ -3,16 +3,15 @@ package de.dmp.server.controller;
 
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.data.Metadata;
-import de.dmp.server.service.MetadataService;
-import de.dmp.server.service.ReactiveUploadMetadataService;
+import de.dmp.server.service.ReactiveMetadataService;
 import de.dmp.server.service.archive.ArchiveService;
-import de.dmp.server.service.criteria.MongoSpecification;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,6 +21,7 @@ import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -48,8 +47,7 @@ class FileControllerTest {
 	@TempDir
 	Path uploadDir;
 
-	private MetadataService metadataService;
-	private ReactiveUploadMetadataService uploadMetadataService;
+	private ReactiveMetadataService uploadMetadataService;
 
 	private FileController controller;
 	private ArchiveService archive;
@@ -107,12 +105,11 @@ class FileControllerTest {
 	@BeforeEach
 	void setUp() throws IOException {
 
-		metadataService = mock(MetadataService.class);
-		uploadMetadataService = mock(ReactiveUploadMetadataService.class);
+		uploadMetadataService = mock(ReactiveMetadataService.class);
 		when(uploadMetadataService.create(any())).thenAnswer(invocation -> Mono.just(new Metadata()));
 		when(uploadMetadataService.update(any(), any())).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 		archive = new ArchiveService(uploadDir);
-		controller = new FileController(metadataService, archive, uploadMetadataService);
+		controller = new FileController(archive, uploadMetadataService);
 	}
 
 	@AfterEach
@@ -128,10 +125,10 @@ class FileControllerTest {
 		void returnsAllMetadata() {
 
 			List<MetadataDto> expected = List.of(metadata(UUID.randomUUID(), "report.pdf", "storage-key"));
-			when(metadataService.findAll()).thenReturn(expected);
+			when(uploadMetadataService.findAll()).thenReturn(Flux.fromIterable(expected));
 
-			assertSame(expected, controller.listFiles().block(Duration.ofSeconds(5)));
-			verify(metadataService).findAll();
+			assertEquals(expected, controller.listFiles().block(Duration.ofSeconds(5)));
+			verify(uploadMetadataService).findAll();
 		}
 
 	}
@@ -144,10 +141,10 @@ class FileControllerTest {
 		void filtersMetadataByTagName() {
 
 			List<MetadataDto> expected = List.of(metadata(UUID.randomUUID(), "report.pdf", "storage-key"));
-			when(metadataService.findByTagName("research")).thenReturn(expected);
+			when(uploadMetadataService.findByTagName("research")).thenReturn(Flux.fromIterable(expected));
 
-			assertSame(expected, controller.listFilesByTag("research").block(Duration.ofSeconds(5)));
-			verify(metadataService).findByTagName("research");
+			assertEquals(expected, controller.listFilesByTag("research").block(Duration.ofSeconds(5)));
+			verify(uploadMetadataService).findByTagName("research");
 		}
 
 	}
@@ -161,10 +158,10 @@ class FileControllerTest {
 
 			UUID id = UUID.randomUUID();
 			MetadataDto expected = metadata(id, "report.pdf", "storage-key");
-			when(metadataService.findById(id)).thenReturn(Optional.of(expected));
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(expected));
 
 			assertEquals(Optional.of(expected), controller.getFileById(id).block(Duration.ofSeconds(5)));
-			verify(metadataService).findById(id);
+			verify(uploadMetadataService).findDtoById(id);
 		}
 
 
@@ -172,10 +169,10 @@ class FileControllerTest {
 		void returnsEmptyWhenIdDoesNotExist() {
 
 			UUID id = UUID.randomUUID();
-			when(metadataService.findById(id)).thenReturn(Optional.empty());
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.empty());
 
 			assertEquals(Optional.empty(), controller.getFileById(id).block(Duration.ofSeconds(5)));
-			verify(metadataService).findById(id);
+			verify(uploadMetadataService).findDtoById(id);
 		}
 
 	}
@@ -185,14 +182,55 @@ class FileControllerTest {
 	class Download {
 
 		@Test
+		void streamsDownloadThroughWebFlux() throws IOException {
+			UUID id = UUID.randomUUID();
+			byte[] contents = new byte[32768];
+			new java.util.Random(1).nextBytes(contents);
+			when(uploadMetadataService.findDtoById(id))
+					.thenReturn(Mono.just(metadata(id, "report.txt", "webflux-key")));
+			writeArchive(uploadDir.resolve("webflux-key.zip"), contents);
+
+			WebTestClient.bindToController(controller).build()
+					.get().uri("/files/{id}/download", id).exchange()
+					.expectStatus().isOk()
+					.expectHeader().contentType(MediaType.APPLICATION_OCTET_STREAM)
+					.expectHeader().contentLength(contents.length)
+					.expectBody(byte[].class).isEqualTo(contents);
+		}
+
+		@Test
+		void readsDownloadContentOffTheCallingThread() {
+			UUID id = UUID.randomUUID();
+			when(uploadMetadataService.findDtoById(id))
+					.thenReturn(Mono.just(metadata(id, "report.txt", "key")));
+			var readThread = new java.util.concurrent.atomic.AtomicReference<String>();
+			var content = new ByteArrayResource("content".getBytes()) {
+				@Override
+				public java.io.InputStream getInputStream() throws IOException {
+					readThread.set(Thread.currentThread().getName());
+					return super.getInputStream();
+				}
+			};
+			var mockedArchive = mock(de.dmp.server.service.archive.Archive.class);
+			when(mockedArchive.retrieve(any())).thenReturn(Mono.just(
+					new de.dmp.server.service.archive.ArchivedFile(content, content.contentLength())));
+			var reactiveController = new FileController(mockedArchive, uploadMetadataService);
+			DataBuffer data = reactiveController.download(id).flatMap(response -> DataBufferUtils.join(response.getBody()))
+					.subscribeOn(reactor.core.scheduler.Schedulers.parallel()).block(Duration.ofSeconds(5));
+			assertNotNull(data);
+			DataBufferUtils.release(data);
+			assertTrue(readThread.get().startsWith("boundedElastic-"), readThread.get());
+		}
+
+		@Test
 		void streamsFirstEntryOfArchiveWithDownloadHeaders() throws IOException {
 
 			UUID id = UUID.randomUUID();
 			byte[] contents = "file contents".getBytes();
-			when(metadataService.findById(id)).thenReturn(Optional.of(metadata(id, "report.txt", "archive-key")));
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "archive-key")));
 			writeArchive(uploadDir.resolve("archive-key.zip"), contents);
 
-			ResponseEntity<Resource> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -214,11 +252,13 @@ class FileControllerTest {
 					        .getFilename()
 			            );
 			assert response.getBody() != null;
-			try (var inputStream = response.getBody()
-			                               .getInputStream()) {
-				assertArrayEquals(contents, inputStream.readAllBytes());
-			}
-			verify(metadataService).findById(id);
+			DataBuffer data = DataBufferUtils.join(response.getBody()).block(Duration.ofSeconds(5));
+			assertNotNull(data);
+			byte[] actual = new byte[data.readableByteCount()];
+			data.read(actual);
+			DataBufferUtils.release(data);
+			assertArrayEquals(contents, actual);
+			verify(uploadMetadataService).findDtoById(id);
 		}
 
 
@@ -226,14 +266,14 @@ class FileControllerTest {
 		void returnsNotFoundWhenMetadataDoesNotExist() {
 
 			UUID id = UUID.randomUUID();
-			when(metadataService.findById(id)).thenReturn(Optional.empty());
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.empty());
 
-			ResponseEntity<Resource> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
 			assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-			verify(metadataService).findById(id);
+			verify(uploadMetadataService).findDtoById(id);
 		}
 
 
@@ -241,9 +281,9 @@ class FileControllerTest {
 		void returnsNotFoundWhenArchiveIsMissing() {
 
 			UUID id = UUID.randomUUID();
-			when(metadataService.findById(id)).thenReturn(Optional.of(metadata(id, "report.txt", "missing-archive")));
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "missing-archive")));
 
-			ResponseEntity<Resource> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -255,10 +295,10 @@ class FileControllerTest {
 		void returnsNotFoundWhenArchiveIsEmpty() throws IOException {
 
 			UUID id = UUID.randomUUID();
-			when(metadataService.findById(id)).thenReturn(Optional.of(metadata(id, "report.txt", "empty-archive")));
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "empty-archive")));
 			writeArchive(uploadDir.resolve("empty-archive.zip"));
 
-			ResponseEntity<Resource> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -269,43 +309,29 @@ class FileControllerTest {
 		void propagatesCorruptArchiveErrors() throws IOException {
 
 			UUID id = UUID.randomUUID();
-			when(metadataService.findById(id)).thenReturn(Optional.of(metadata(id, "report.txt", "bad-archive")));
+			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "bad-archive")));
 			Files.writeString(uploadDir.resolve("bad-archive.zip"), "not a zip");
 
 			Throwable failure = assertThrows(RuntimeException.class,
 			                                 () -> controller.download(id)
 			                                                 .block(Duration.ofSeconds(5)));
-			assertInstanceOf(java.util.concurrent.ExecutionException.class, failure.getCause());
-			assertInstanceOf(IOException.class, failure.getCause()
-			                                           .getCause());
+			assertInstanceOf(IOException.class, failure.getCause());
 		}
 
 	}
 
 
 	@Nested
-	@SuppressWarnings("unchecked")
 	class GetFilesByName {
 
 		@Test
 		void returnsMetadataMatchingNameQuery() {
 
 			List<MetadataDto> expected = List.of(metadata(UUID.randomUUID(), "report.pdf", "storage-key"));
-			when(metadataService.where(any())).thenReturn(expected);
+			when(uploadMetadataService.findByName("report.*")).thenReturn(Flux.fromIterable(expected));
 
-			assertSame(expected, controller.getFilesByName("report.*").block(Duration.ofSeconds(5)));
-
-			var specification = org.mockito.ArgumentCaptor.forClass(MongoSpecification.class);
-			verify(metadataService).where(specification.capture());
-			Pattern namePattern = assertInstanceOf(
-					Pattern.class,
-					specification.getValue()
-					             .toCriteria()
-					             .getCriteriaObject()
-					             .get("name")
-			                                      );
-			assertEquals("report.*", namePattern.pattern());
-			assertEquals(Pattern.CASE_INSENSITIVE, namePattern.flags());
+			assertEquals(expected, controller.getFilesByName("report.*").block(Duration.ofSeconds(5)));
+			verify(uploadMetadataService).findByName("report.*");
 		}
 
 	}
@@ -447,7 +473,6 @@ class FileControllerTest {
 					                                                     file, new UploadMetadataRequest(null, "description", Set.of())
 			                                                            )
 			                                                     .block(Duration.ofSeconds(5)));
-			verifyNoInteractions(metadataService);
 			verify(uploadMetadataService, never()).create(any());
 			try (var files = Files.list(uploadDir)) {
 				assertEquals(0, files.count());

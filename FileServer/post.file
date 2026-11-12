@@ -6,7 +6,7 @@ csrf=$(curl -fsS -c "$cookies" http://localhost:8080/login \
 
 curl -i --netrc-file fileserver.netrc -b "$cookies" \
   -H "X-CSRF-TOKEN: $csrf" \
-  -F 'file=@FileServer/src/test/resources/files/testfile' \
+  -F 'file=@src/test/resources/files/testfile' \
   -F 'metadata={"description":"Test upload","tags":["test"]};type=application/json' \
   http://localhost:8080/files
 

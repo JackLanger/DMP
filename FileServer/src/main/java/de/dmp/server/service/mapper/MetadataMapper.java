@@ -3,6 +3,7 @@ package de.dmp.server.service.mapper;
 
 import de.dmp.server.data.Metadata;
 import de.dmp.server.data.Tag;
+import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.data.vo.MetadataVO;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +13,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class MetadataMapper implements java.util.function.Function<MetadataVO, Metadata> {
+
+  public MetadataDto toDto(Metadata metadata) {
+    return new MetadataDto(metadata.getId(), metadata.getName(), metadata.getDescription(),
+        metadata.getFileLocation(), metadata.getCreatedAt(),
+        metadata.getTags().stream().map(Tag::getName).collect(java.util.stream.Collectors.toSet()));
+  }
 
   @Override
   public Metadata apply(MetadataVO vo) {

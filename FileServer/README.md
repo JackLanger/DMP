@@ -54,11 +54,11 @@ normally appear after their first write.
 
 ## Uploads
 
-The HTTP server uses WebFlux and the reactive MongoDB driver for uploads.
-Multipart file transfer is reactive; ZIP compression and filesystem cleanup run
-on bounded-elastic worker threads because those operations use blocking I/O.
-The existing synchronous MongoDB reads and archive downloads also run off the
-event loop. `ARCHIVE_UPLOAD_DIR` selects the archive directory.
+The HTTP server uses WebFlux and the reactive MongoDB driver for file metadata
+reads and uploads. Multipart transfers and downloads are streamed reactively;
+blocking ZIP and filesystem operations run off the event loop.
+`ARCHIVE_UPLOAD_DIR` selects the archive directory, and `ARCHIVE_WORKERS`
+controls the number of archive I/O workers.
 
 Uploads require `file` and JSON `metadata` multipart parts. The HTTP server
 requires authentication and CSRF protection; restart it after configuration

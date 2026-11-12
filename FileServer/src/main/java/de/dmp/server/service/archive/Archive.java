@@ -4,44 +4,27 @@ import de.dmp.server.data.dto.MetadataDto;
 import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Optional;
-import java.util.concurrent.Future;
 
 public interface Archive extends AutoCloseable {
 
 	Path getUploadDir();
 
 	/**
-	 * Stores the file and returns its storage key. This method blocks until the transfer and archive are complete.
-	 */
-	String store(FilePart file) throws IOException;
-
-	/**
-	 * Submits a store operation; the future returns the storage key or reports the storage failure.
-	 */
-	Future<String> storeAsync(FilePart file);
-
-	/**
 	 * Starts storing on subscription and emits the storage key after cleanup. Once started,
 	 * storage continues even if subscribers cancel; subscriptions share the same result.
 	 */
-	Mono<String> storeReactive(FilePart file);
+	Mono<String> store(FilePart file);
 
 	/**
-	 * Deletes the archive for the given storage key. This method blocks until the deletion is complete.
+	 * Deletes the archive for the given storage key on subscription.
 	 */
-	void delete(String storageKey) throws IOException;
+	Mono<Void> delete(String storageKey);
 
 	/**
-	 * Returns an empty result for a missing or empty archive; I/O failures are reported by the future.
-	 */
-	Future<Optional<ArchivedFile>> retrieveAsync(MetadataDto metadataDto);
-
-	/**
+	 * Emits no value for a missing or empty archive; I/O failures are reported as errors.
 	 * The returned resource opens its stream on demand, and the caller must close that stream.
 	 */
-	Optional<ArchivedFile> retrieve(MetadataDto metadataDto) throws IOException;
+	Mono<ArchivedFile> retrieve(MetadataDto metadataDto);
 
 }
