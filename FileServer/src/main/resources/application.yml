@@ -1,15 +1,21 @@
 spring:
 
+  main:
+    web-application-type: reactive
+
   application:
     name: FileServer
 
   mongodb:
     uri: ${SPRING_MONGODB_URI:mongodb://localhost:27017/dmp}
+    representation:
+      uuid: standard
 
   security:
     user:
       name: dev
-#      password: ${FILESERVER_PASSWORD:change-me}
+      password: ${FILESERVER_PASSWORD:change-me}
 
 archive:
   workers: ${ARCHIVE_WORKERS:2}
+  upload: ${ARCHIVE_UPLOAD_DIR:data/archive}

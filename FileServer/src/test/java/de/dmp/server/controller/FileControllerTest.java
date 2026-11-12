@@ -2,7 +2,9 @@ package de.dmp.server.controller;
 
 
 import de.dmp.server.data.dto.MetadataDto;
+import de.dmp.server.data.Metadata;
 import de.dmp.server.service.MetadataService;
+import de.dmp.server.service.ReactiveUploadMetadataService;
 import de.dmp.server.service.archive.ArchiveService;
 import de.dmp.server.service.criteria.MongoSpecification;
 import org.junit.jupiter.api.AfterEach;
@@ -11,10 +13,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.Resource;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
@@ -43,6 +49,7 @@ class FileControllerTest {
 	Path uploadDir;
 
 	private MetadataService metadataService;
+	private ReactiveUploadMetadataService uploadMetadataService;
 
 	private FileController controller;
 	private ArchiveService archive;
@@ -57,7 +64,7 @@ class FileControllerTest {
 	private static FilePart filePart(String name, byte[] contents) {
 
 		FilePart file = mock(FilePart.class);
-		when(file.name()).thenReturn(name);
+		when(file.filename()).thenReturn(name);
 		when(file.transferTo(any(Path.class))).thenAnswer(invocation -> Mono.fromRunnable(() -> {
 			try {
 				Files.write(invocation.getArgument(0), contents);
@@ -101,8 +108,11 @@ class FileControllerTest {
 	void setUp() throws IOException {
 
 		metadataService = mock(MetadataService.class);
+		uploadMetadataService = mock(ReactiveUploadMetadataService.class);
+		when(uploadMetadataService.create(any())).thenAnswer(invocation -> Mono.just(new Metadata()));
+		when(uploadMetadataService.update(any(), any())).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 		archive = new ArchiveService(uploadDir);
-		controller = new FileController(metadataService, archive);
+		controller = new FileController(metadataService, archive, uploadMetadataService);
 	}
 
 	@AfterEach
@@ -120,7 +130,7 @@ class FileControllerTest {
 			List<MetadataDto> expected = List.of(metadata(UUID.randomUUID(), "report.pdf", "storage-key"));
 			when(metadataService.findAll()).thenReturn(expected);
 
-			assertSame(expected, controller.listFiles());
+			assertSame(expected, controller.listFiles().block(Duration.ofSeconds(5)));
 			verify(metadataService).findAll();
 		}
 
@@ -136,7 +146,7 @@ class FileControllerTest {
 			List<MetadataDto> expected = List.of(metadata(UUID.randomUUID(), "report.pdf", "storage-key"));
 			when(metadataService.findByTagName("research")).thenReturn(expected);
 
-			assertSame(expected, controller.listFilesByTag("research"));
+			assertSame(expected, controller.listFilesByTag("research").block(Duration.ofSeconds(5)));
 			verify(metadataService).findByTagName("research");
 		}
 
@@ -153,7 +163,7 @@ class FileControllerTest {
 			MetadataDto expected = metadata(id, "report.pdf", "storage-key");
 			when(metadataService.findById(id)).thenReturn(Optional.of(expected));
 
-			assertEquals(Optional.of(expected), controller.getFileById(id));
+			assertEquals(Optional.of(expected), controller.getFileById(id).block(Duration.ofSeconds(5)));
 			verify(metadataService).findById(id);
 		}
 
@@ -164,7 +174,7 @@ class FileControllerTest {
 			UUID id = UUID.randomUUID();
 			when(metadataService.findById(id)).thenReturn(Optional.empty());
 
-			assertEquals(Optional.empty(), controller.getFileById(id));
+			assertEquals(Optional.empty(), controller.getFileById(id).block(Duration.ofSeconds(5)));
 			verify(metadataService).findById(id);
 		}
 
@@ -283,7 +293,7 @@ class FileControllerTest {
 			List<MetadataDto> expected = List.of(metadata(UUID.randomUUID(), "report.pdf", "storage-key"));
 			when(metadataService.where(any())).thenReturn(expected);
 
-			assertSame(expected, controller.getFilesByName("report.*"));
+			assertSame(expected, controller.getFilesByName("report.*").block(Duration.ofSeconds(5)));
 
 			var specification = org.mockito.ArgumentCaptor.forClass(MongoSpecification.class);
 			verify(metadataService).where(specification.capture());
@@ -305,6 +315,34 @@ class FileControllerTest {
 	class Upload {
 
 		@Test
+		void acceptsMultipartThroughWebFlux() throws IOException {
+			byte[] contents = "multipart upload".getBytes();
+			MultipartBodyBuilder body = new MultipartBodyBuilder();
+			body.part("file", new ByteArrayResource(contents) {
+				@Override public String getFilename() {
+					return "report.txt";
+				}
+			});
+			body.part("metadata", "{\"description\":\"description\",\"tags\":[\"research\"]}")
+			    .contentType(MediaType.APPLICATION_JSON);
+
+			String key = WebTestClient.bindToController(controller).build()
+					.post().uri("/files")
+					.contentType(MediaType.MULTIPART_FORM_DATA)
+					.body(BodyInserters.fromMultipartData(body.build()))
+					.exchange()
+					.expectStatus().isCreated()
+					.expectBody(String.class).returnResult().getResponseBody();
+
+			assertNotNull(key);
+			assertArchiveContains(uploadDir.resolve(key + ".zip"), contents);
+			var created = org.mockito.ArgumentCaptor.forClass(MetadataDto.class);
+			verify(uploadMetadataService).create(created.capture());
+			assertEquals("report.txt", created.getValue().name());
+			assertEquals(Set.of("research"), created.getValue().tags());
+		}
+
+		@Test
 		void createsMetadataAndArchiveForNewUpload() throws IOException {
 
 			byte[] contents = "upload contents".getBytes();
@@ -318,7 +356,7 @@ class FileControllerTest {
 			assertEquals(HttpStatus.CREATED, response.getStatusCode());
 			assertNotNull(response.getBody());
 			var created = org.mockito.ArgumentCaptor.forClass(MetadataDto.class);
-			verify(metadataService).create(created.capture());
+			verify(uploadMetadataService).create(created.capture());
 			assertEquals(
 					"report.txt",
 					created.getValue()
@@ -338,7 +376,7 @@ class FileControllerTest {
 			try (var files = Files.list(uploadDir)) {
 				assertEquals(1, files.count());
 			}
-			verify(metadataService, never()).update(any(), any());
+			verify(uploadMetadataService, never()).update(any(), any());
 		}
 
 
@@ -348,8 +386,10 @@ class FileControllerTest {
 			UUID id = UUID.randomUUID();
 			byte[] contents = "replacement contents".getBytes();
 			FilePart file = filePart("replacement.txt", contents);
-			MetadataDto oldMetadata = metadata(id, "old.txt", "old-storage-key");
-			when(metadataService.findById(id)).thenReturn(Optional.of(oldMetadata));
+			Metadata oldMetadata = new Metadata();
+			oldMetadata.setId(id);
+			oldMetadata.setFileLocation("old-storage-key");
+			when(uploadMetadataService.findById(id)).thenReturn(Mono.just(oldMetadata));
 			Files.createFile(uploadDir.resolve("old-storage-key.zip"));
 
 			ResponseEntity<String> response = controller.upload(
@@ -361,7 +401,7 @@ class FileControllerTest {
 			assertNotNull(response);
 			assertEquals(HttpStatus.CREATED, response.getStatusCode());
 			var updated = org.mockito.ArgumentCaptor.forClass(MetadataDto.class);
-			verify(metadataService).update(eq(id), updated.capture());
+			verify(uploadMetadataService).update(eq(oldMetadata), updated.capture());
 			assertEquals(
 					"replacement.txt",
 					updated.getValue()
@@ -379,15 +419,14 @@ class FileControllerTest {
 			            );
 			assertFalse(Files.exists(uploadDir.resolve("old-storage-key.zip")));
 			assertArchiveContains(uploadDir.resolve(response.getBody() + ".zip"), contents);
-			verify(metadataService, never()).create(any());
+			verify(uploadMetadataService, never()).create(any());
 		}
 
 		@Test
 		void removesNewArchiveIfMetadataPersistenceFails() throws IOException {
 
 			FilePart file = filePart("report.txt", "contents".getBytes());
-			doThrow(new IllegalStateException("metadata failed")).when(metadataService)
-			                                                     .create(any());
+			when(uploadMetadataService.create(any())).thenReturn(Mono.error(new IllegalStateException("metadata failed")));
 
 			assertThrows(IllegalStateException.class, () -> controller.upload(
 					                                                          file, new UploadMetadataRequest(null, "description", Set.of())
@@ -409,6 +448,7 @@ class FileControllerTest {
 			                                                            )
 			                                                     .block(Duration.ofSeconds(5)));
 			verifyNoInteractions(metadataService);
+			verify(uploadMetadataService, never()).create(any());
 			try (var files = Files.list(uploadDir)) {
 				assertEquals(0, files.count());
 			}
@@ -419,10 +459,11 @@ class FileControllerTest {
 
 			UUID id = UUID.randomUUID();
 			Files.writeString(uploadDir.resolve("old-storage-key.zip"), "old archive");
-			when(metadataService.findById(id))
-					.thenReturn(Optional.of(metadata(id, "old.txt", "old-storage-key")));
-			doThrow(new IllegalStateException("metadata failed")).when(metadataService)
-			                                                     .update(eq(id), any());
+			Metadata oldMetadata = new Metadata();
+			oldMetadata.setId(id);
+			oldMetadata.setFileLocation("old-storage-key");
+			when(uploadMetadataService.findById(id)).thenReturn(Mono.just(oldMetadata));
+			doReturn(Mono.error(new IllegalStateException("metadata failed"))).when(uploadMetadataService).update(eq(oldMetadata), any());
 
 			assertThrows(IllegalStateException.class, () -> controller.upload(
 					                                                          filePart("replacement.txt", "contents".getBytes()),

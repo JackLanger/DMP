@@ -41,6 +41,7 @@ spring-boot-starter-actuator-test = { module = "org.springframework.boot:spring-
 spring-boot-starter-cache = { module = "org.springframework.boot:spring-boot-starter-cache" }
 spring-boot-starter-cache-test = { module = "org.springframework.boot:spring-boot-starter-cache-test" }
 spring-boot-starter-data-mongodb = { module = "org.springframework.boot:spring-boot-starter-data-mongodb" }
+spring-boot-starter-data-mongodb-reactive = { module = "org.springframework.boot:spring-boot-starter-data-mongodb-reactive" }
 spring-boot-starter-data-mongodb-test = { module = "org.springframework.boot:spring-boot-starter-data-mongodb-test" }
 spring-boot-starter-grpc-server = { module = "org.springframework.boot:spring-boot-starter-grpc-server" }
 spring-boot-starter-grpc-server-test = { module = "org.springframework.boot:spring-boot-starter-grpc-server-test" }
@@ -84,12 +85,12 @@ spring-core = [
 ]
 
 spring-mongo = [
-    "spring-boot-starter-data-mongodb"
+    "spring-boot-starter-data-mongodb",
+    "spring-boot-starter-data-mongodb-reactive"
 ]
 
 spring-other = [
-    "spring-boot-starter-grpc-server",
-    "spring-boot-starter-webservices"
+    "spring-boot-starter-grpc-server"
 ]
 
 spring-core-test = [
@@ -106,7 +107,6 @@ spring-mongo-test = [
 spring-other-test = [
     "spring-boot-starter-grpc-server-test",
     "spring-boot-starter-restdocs",
-    "spring-boot-starter-webservices-test",
     "spring-boot-testcontainers",
     "spring-restdocs-webtestclient"
 ]

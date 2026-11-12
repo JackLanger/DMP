@@ -5,8 +5,11 @@ import de.dmp.server.service.archive.ops.DeleteOperation;
 import de.dmp.server.service.archive.ops.RetrieveOperation;
 import de.dmp.server.service.archive.ops.StoreOperation;
 import org.springframework.http.codec.multipart.FilePart;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.Future;
@@ -38,6 +41,27 @@ public class ArchiveService implements Archive {
 	public Future<String> storeAsync(FilePart file) {
 
 		return master.submit(new StoreOperation(file));
+	}
+
+	@Override
+	public Mono<String> storeReactive(FilePart file) {
+
+		return Mono.usingWhen(
+				Mono.fromCallable(() -> Files.createTempFile(context.uploadDir(), "tmp", ".upload"))
+				    .subscribeOn(Schedulers.boundedElastic()),
+				destination -> Mono.defer(() -> file.transferTo(destination))
+				                   .then(Mono.fromCallable(() -> StoreOperation.archive(context, destination))
+				                             .subscribeOn(Schedulers.boundedElastic())),
+				ArchiveService::cleanupTemporary,
+				(destination, error) -> cleanupTemporary(destination),
+				ArchiveService::cleanupTemporary
+		                     ).cache();
+	}
+
+	private static Mono<Void> cleanupTemporary(Path destination) {
+
+		return Mono.<Void>fromRunnable(() -> StoreOperation.cleanupTemporary(destination))
+		           .subscribeOn(Schedulers.boundedElastic());
 	}
 
 	@Override

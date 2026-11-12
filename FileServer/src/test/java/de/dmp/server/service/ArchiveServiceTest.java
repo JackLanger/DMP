@@ -9,12 +9,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
@@ -23,6 +27,8 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ArchiveServiceTest {
@@ -95,6 +101,75 @@ class ArchiveServiceTest {
 		try (var files = Files.list(uploadDir)) {
 			assertEquals(0, files.count());
 		}
+	}
+
+	@Test
+	void reactiveStoreTransfersOnceAndRetrievesArchive() throws Exception {
+
+		byte[] contents = "reactive archive contents".getBytes();
+		FilePart file = filePart(contents);
+		Mono<String> result = archive.storeReactive(file);
+		verify(file, times(0)).transferTo(any(Path.class));
+
+		String key = result.subscribeOn(Schedulers.parallel()).block(Duration.ofSeconds(5));
+		assertEquals(key, result.block(Duration.ofSeconds(5)));
+		verify(file, times(1)).transferTo(any(Path.class));
+		MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
+		try (var input = archive.retrieve(metadata).orElseThrow().content().getInputStream()) {
+			assertArrayEquals(contents, input.readAllBytes());
+		}
+		try (var files = Files.list(uploadDir)) {
+			assertEquals(Set.of(key + ".zip"), files.map(path -> path.getFileName().toString())
+			                                         .collect(java.util.stream.Collectors.toSet()));
+		}
+	}
+
+	@Test
+	void reactiveTransferFailureCleansTemporaryFile() throws Exception {
+
+		FilePart file = mock(FilePart.class);
+		var failure = new IllegalStateException("transfer failed");
+		when(file.transferTo(any(Path.class))).thenAnswer(invocation -> Mono.fromRunnable(() -> {
+			try {
+				Files.writeString(invocation.getArgument(0), "partial upload");
+			} catch (IOException ex) {
+				throw new UncheckedIOException(ex);
+			}
+		}).then(Mono.error(failure)));
+		IllegalStateException actual = assertThrows(IllegalStateException.class,
+				() -> archive.storeReactive(file).block(Duration.ofSeconds(5)));
+		assertSame(failure, actual);
+		try (var files = Files.list(uploadDir)) {
+			assertEquals(0, files.count());
+		}
+	}
+
+	@Test
+	void cancellingSubscriberDoesNotInterruptTransferOrCleanFileEarly() throws Exception {
+
+		FilePart file = mock(FilePart.class);
+		var destination = new CompletableFuture<Path>();
+		Sinks.Empty<Void> transfer = Sinks.empty();
+		when(file.transferTo(any(Path.class))).thenAnswer(invocation -> Mono.defer(() -> {
+			destination.complete(invocation.getArgument(0));
+			return transfer.asMono();
+		}));
+		Mono<String> result = archive.storeReactive(file);
+		var subscription = result.subscribe();
+		Path temporary = destination.get(5, TimeUnit.SECONDS);
+		subscription.dispose();
+		assertTrue(Files.exists(temporary));
+		byte[] contents = "completed after cancellation".getBytes();
+		Files.write(temporary, contents);
+		assertEquals(Sinks.EmitResult.OK, transfer.tryEmitEmpty());
+
+		String key = result.block(Duration.ofSeconds(5));
+		assertFalse(Files.exists(temporary));
+		MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
+		try (var input = archive.retrieve(metadata).orElseThrow().content().getInputStream()) {
+			assertArrayEquals(contents, input.readAllBytes());
+		}
+		verify(file, times(1)).transferTo(any(Path.class));
 	}
 
 	@Test

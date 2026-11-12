@@ -2,7 +2,9 @@ package de.dmp.server.controller;
 
 
 import de.dmp.server.data.dto.MetadataDto;
+import de.dmp.server.data.Metadata;
 import de.dmp.server.service.MetadataService;
+import de.dmp.server.service.ReactiveUploadMetadataService;
 import de.dmp.server.service.archive.Archive;
 import de.dmp.server.service.archive.ArchivedFile;
 import lombok.extern.slf4j.Slf4j;
@@ -26,36 +28,39 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 @RestController
 @RequestMapping("/files")
+@RestControllerAdvice
 public class FileController {
 
 	private final MetadataService metadataService;
 
 	private final Archive archive;
+	private final ReactiveUploadMetadataService uploadMetadataService;
 
 
 	@Autowired
-	public FileController(MetadataService metadataService, Archive archive) {
+	public FileController(MetadataService metadataService, Archive archive, ReactiveUploadMetadataService uploadMetadataService) {
 
 		this.metadataService = metadataService;
 		this.archive = archive;
+		this.uploadMetadataService = uploadMetadataService;
 	}
 
 	@GetMapping("/all")
-	public List<MetadataDto> listFiles() {
+	public Mono<List<MetadataDto>> listFiles() {
 
-		return metadataService.findAll();
+		return Mono.fromCallable(metadataService::findAll).subscribeOn(Schedulers.boundedElastic());
 	}
 
 	@GetMapping("/tagged/{tag}")
-	public List<MetadataDto> listFilesByTag(@PathVariable("tag") String tagName) {
+	public Mono<List<MetadataDto>> listFilesByTag(@PathVariable("tag") String tagName) {
 
-		return metadataService.findByTagName(tagName);
+		return Mono.fromCallable(() -> metadataService.findByTagName(tagName)).subscribeOn(Schedulers.boundedElastic());
 	}
 
 	@GetMapping("/{id}")
-	public Optional<MetadataDto> getFileById(@PathVariable("id") UUID id) {
+	public Mono<Optional<MetadataDto>> getFileById(@PathVariable("id") UUID id) {
 
-		return metadataService.findById(id);
+		return Mono.fromCallable(() -> metadataService.findById(id)).subscribeOn(Schedulers.boundedElastic());
 	}
 
 	@GetMapping("/{id}/download")
@@ -99,11 +104,11 @@ public class FileController {
 	}
 
 	@GetMapping("/named/{name}")
-	public List<MetadataDto> getFilesByName(@PathVariable("name") String name) {
+	public Mono<List<MetadataDto>> getFilesByName(@PathVariable("name") String name) {
 
-		return metadataService.where(
+		return Mono.fromCallable(() -> metadataService.where(
 				() -> Criteria.where("name")
-				              .regex(name, "i"));
+				              .regex(name, "i"))).subscribeOn(Schedulers.boundedElastic());
 	}
 
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -112,45 +117,42 @@ public class FileController {
 			@RequestPart("metadata") UploadMetadataRequest metadata
 	                                          ) {
 
-		// Do not cancel the storage and metadata task when the response subscriber disconnects.
-		return Mono.fromCallable(() -> persistUpload(file, metadata))
-		           .subscribeOn(Schedulers.boundedElastic())
-		           .cache();
+		return Mono.defer(() -> archive.storeReactive(file)
+				.flatMap(storageKey -> Mono.defer(() -> persistUpload(file, metadata, storageKey))
+						.onErrorResume(ex -> deleteArchive(storageKey)
+								.onErrorResume(cleanup -> {
+									ex.addSuppressed(cleanup);
+									return Mono.empty();
+								})
+								.then(Mono.error(ex))))
+				.map(storageKey -> ResponseEntity.status(HttpStatus.CREATED).body(storageKey)))
+				.cache();
 	}
 
-	private ResponseEntity<String> persistUpload(FilePart file, UploadMetadataRequest metadata)
-			throws ExecutionException, InterruptedException {
+	private Mono<String> persistUpload(FilePart file, UploadMetadataRequest metadata, String storageKey) {
+		MetadataDto replacement = new MetadataDto(file.filename(), metadata.description(), storageKey, metadata.tags());
+		Mono<Metadata> existing = metadata.uuid() == null
+				? Mono.empty() : uploadMetadataService.findById(metadata.uuid());
+		return existing.flatMap(old -> {
+			String oldStorageKey = old.getFileLocation();
+			return uploadMetadataService.update(old, replacement)
+					.flatMap(updated -> deleteArchive(oldStorageKey)
+							.onErrorResume(ex -> {
+								log.warn("Failed to delete archive for {}", oldStorageKey, ex);
+								return Mono.empty();
+							})
+							.thenReturn(storageKey));
+		}).switchIfEmpty(Mono.defer(() -> uploadMetadataService.create(replacement).thenReturn(storageKey)));
+	}
 
-		String storageKey = archive.storeAsync(file)
-		                           .get();
-		Optional<MetadataDto> existing;
-		try {
-			existing = Optional.ofNullable(metadata.uuid())
-			                   .flatMap(metadataService::findById);
-			MetadataDto replacement = new MetadataDto(file.name(), metadata.description(), storageKey, metadata.tags());
-			if (existing.isPresent()) {
-				metadataService.update(metadata.uuid(), replacement);
-			} else {
-				metadataService.create(replacement);
-			}
-		} catch (RuntimeException ex) {
+	private Mono<Void> deleteArchive(String storageKey) {
+		return Mono.fromRunnable(() -> {
 			try {
 				archive.delete(storageKey);
-			} catch (IOException cleanup) {
-				ex.addSuppressed(cleanup);
-			}
-			throw ex;
-		}
-		existing.ifPresent(old -> {
-			try {
-				archive.delete(old.fileLocation());
 			} catch (IOException ex) {
-				log.warn("Failed to delete archive for {}", old.fileLocation(), ex);
+				throw new java.io.UncheckedIOException(ex);
 			}
-		});
-
-		return ResponseEntity.status(HttpStatus.CREATED)
-		                     .body(storageKey);
+		}).subscribeOn(Schedulers.boundedElastic()).then();
 	}
 
 }
