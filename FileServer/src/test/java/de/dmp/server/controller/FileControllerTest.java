@@ -96,7 +96,7 @@ class FileControllerTest {
 
 
 	@BeforeEach
-	void setUp() {
+	void setUp() throws IOException {
 
 		metadataService = mock(MetadataService.class);
 		controller = new FileController(metadataService, new Archive(uploadDir));

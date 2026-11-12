@@ -3,12 +3,13 @@ package de.dmp.server.configuration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.yaml.snakeyaml.Yaml;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.dataformat.yaml.YAMLFactory;
 
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
-import java.util.Map;
 
 @Configuration
 public class ArchiveConfig {
@@ -30,17 +31,17 @@ public class ArchiveConfig {
 		                           .getClassLoader()
 		                           .getResourceAsStream("app.yaml")) {
 
-			Yaml yaml = new Yaml();
-			Object configuration = yaml.load(inputStream);
-			if (!(configuration instanceof Map<?, ?> values)
-					|| !(values.get("uploadDir") instanceof String uploadDir)) {
+			ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+			JsonNode configuration = mapper.readTree(inputStream);
+			JsonNode uploadDirNode = configuration == null ? null : configuration.get("uploadDir");
+			if (uploadDirNode == null || !uploadDirNode.isString()) {
 				throw new IllegalStateException("app.yaml must define uploadDir as a string");
 			}
 
+			String uploadDir = uploadDirNode.stringValue();
 			Path dir = Path.of(uploadDir);
-			Archive archive = new Archive(dir);
-			archive.setUploadDir(dir);
-			return archive;
+			return new Archive(dir);
+			
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
