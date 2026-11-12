@@ -1,6 +1,8 @@
 package de.dmp.server.service;
 
 import de.dmp.server.data.dto.MetadataDto;
+import de.dmp.server.service.archive.ArchiveService;
+import de.dmp.server.service.archive.ArchivedFile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,7 +22,8 @@ import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ArchiveServiceTest {
 
@@ -30,15 +33,18 @@ class ArchiveServiceTest {
 
 	@BeforeEach
 	void setUp() throws IOException {
+
 		archive = new ArchiveService(uploadDir);
 	}
 
 	@AfterEach
 	void tearDown() {
+
 		archive.close();
 	}
 
 	private FilePart filePart(byte[] contents) {
+
 		FilePart file = mock(FilePart.class);
 		when(file.transferTo(any(Path.class))).thenAnswer(invocation -> Mono.fromRunnable(() -> {
 			try {
@@ -52,20 +58,25 @@ class ArchiveServiceTest {
 
 	@Test
 	void storesSynchronouslyAndAsynchronouslyAndRetrievesArchives() throws Exception {
+
 		byte[] contents = "archive contents".getBytes();
 		String syncKey = archive.store(filePart(contents));
-		String asyncKey = archive.storeAsync(filePart(contents)).get(5, TimeUnit.SECONDS);
+		String asyncKey = archive.storeAsync(filePart(contents))
+		                         .get(5, TimeUnit.SECONDS);
 		assertNotEquals(syncKey, asyncKey);
 
 		for (String key : Set.of(syncKey, asyncKey)) {
 			MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
-			ArchivedFile result = archive.retrieve(metadata).orElseThrow();
+			ArchivedFile result = archive.retrieve(metadata)
+			                             .orElseThrow();
 			assertEquals(contents.length, result.size());
-			try (var input = result.content().getInputStream()) {
+			try (var input = result.content()
+			                       .getInputStream()) {
 				assertArrayEquals(contents, input.readAllBytes());
 			}
 			archive.delete(key);
-			assertTrue(archive.retrieve(metadata).isEmpty());
+			assertTrue(archive.retrieve(metadata)
+			                  .isEmpty());
 		}
 		try (var files = Files.list(uploadDir)) {
 			assertEquals(0, files.count());
@@ -74,10 +85,12 @@ class ArchiveServiceTest {
 
 	@Test
 	void asynchronousFailuresAreReportedAndTemporaryFilesRemoved() throws Exception {
+
 		FilePart file = mock(FilePart.class);
 		when(file.transferTo(any(Path.class))).thenReturn(Mono.error(new IllegalStateException("transfer failed")));
 		ExecutionException failure = assertThrows(ExecutionException.class,
-				() -> archive.storeAsync(file).get(5, TimeUnit.SECONDS));
+		                                          () -> archive.storeAsync(file)
+		                                                       .get(5, TimeUnit.SECONDS));
 		assertInstanceOf(IllegalStateException.class, failure.getCause());
 		try (var files = Files.list(uploadDir)) {
 			assertEquals(0, files.count());
@@ -86,15 +99,18 @@ class ArchiveServiceTest {
 
 	@Test
 	void corruptArchiveErrorsPropagateFromRetrieveAsync() throws Exception {
+
 		Files.writeString(uploadDir.resolve("bad.zip"), "not a zip");
 		MetadataDto metadata = new MetadataDto("file.txt", "description", "bad", Set.of());
 		ExecutionException failure = assertThrows(ExecutionException.class,
-				() -> archive.retrieveAsync(metadata).get(5, TimeUnit.SECONDS));
+		                                          () -> archive.retrieveAsync(metadata)
+		                                                       .get(5, TimeUnit.SECONDS));
 		assertInstanceOf(IOException.class, failure.getCause());
 	}
 
 	@Test
 	void retrievesFirstEntryLazilyAndClosesItsStream() throws Exception {
+
 		Path path = uploadDir.resolve("multiple.zip");
 		try (var zip = new ZipOutputStream(Files.newOutputStream(path))) {
 			zip.putNextEntry(new ZipEntry("first.txt"));
@@ -105,9 +121,12 @@ class ArchiveServiceTest {
 			zip.closeEntry();
 		}
 		MetadataDto metadata = new MetadataDto("file.txt", "description", "multiple", Set.of());
-		ArchivedFile result = archive.retrieveAsync(metadata).get(5, TimeUnit.SECONDS).orElseThrow();
+		ArchivedFile result = archive.retrieveAsync(metadata)
+		                             .get(5, TimeUnit.SECONDS)
+		                             .orElseThrow();
 		assertEquals(5, result.size());
-		var input = result.content().getInputStream();
+		var input = result.content()
+		                  .getInputStream();
 		assertArrayEquals("first".getBytes(), input.readAllBytes());
 		input.close();
 		assertThrows(IOException.class, input::read);
@@ -115,26 +134,35 @@ class ArchiveServiceTest {
 
 	@Test
 	void missingAndEmptyArchivesReturnEmptyResults() throws Exception {
+
 		MetadataDto missing = new MetadataDto("file.txt", "description", "missing", Set.of());
-		assertTrue(archive.retrieveAsync(missing).get(5, TimeUnit.SECONDS).isEmpty());
+		assertTrue(archive.retrieveAsync(missing)
+		                  .get(5, TimeUnit.SECONDS)
+		                  .isEmpty());
 		try (var zip = new ZipOutputStream(Files.newOutputStream(uploadDir.resolve("empty.zip")))) {
 			zip.finish();
 		}
 		MetadataDto empty = new MetadataDto("file.txt", "description", "empty", Set.of());
-		assertTrue(archive.retrieve(empty).isEmpty());
+		assertTrue(archive.retrieve(empty)
+		                  .isEmpty());
 	}
 
 	@Test
 	void openingRetrievedContentReportsArchiveRemoval() throws Exception {
+
 		String key = archive.store(filePart("content".getBytes()));
 		MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
-		ArchivedFile result = archive.retrieve(metadata).orElseThrow();
+		ArchivedFile result = archive.retrieve(metadata)
+		                             .orElseThrow();
 		archive.delete(key);
-		assertThrows(IOException.class, () -> result.content().getInputStream());
+		assertThrows(IOException.class, () -> result.content()
+		                                            .getInputStream());
 	}
 
 	@Test
 	void rejectsPathsOutsideArchiveDirectory() {
+
 		assertThrows(IOException.class, () -> archive.delete("../outside"));
 	}
+
 }

@@ -10,3 +10,6 @@ spring:
     user:
       name: dev
 #      password: ${FILESERVER_PASSWORD:change-me}
+
+archive:
+  workers: ${ARCHIVE_WORKERS:2}

@@ -1,4 +1,4 @@
-package de.dmp.server.service;
+package de.dmp.server.service.archive;
 
 import org.springframework.core.io.Resource;
 
@@ -7,4 +7,5 @@ import org.springframework.core.io.Resource;
  * The resource opens the content on demand; its stream must be closed by the caller.
  */
 public record ArchivedFile(Resource content, long size) {
+
 }

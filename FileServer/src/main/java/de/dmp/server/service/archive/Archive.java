@@ -1,4 +1,4 @@
-package de.dmp.server.service;
+package de.dmp.server.service.archive;
 
 import de.dmp.server.data.dto.MetadataDto;
 import org.springframework.http.codec.multipart.FilePart;
@@ -22,12 +22,19 @@ public interface Archive extends AutoCloseable {
 	 */
 	Future<String> storeAsync(FilePart file);
 
+	/**
+	 * Deletes the archive for the given storage key. This method blocks until the deletion is complete.
+	 */
 	void delete(String storageKey) throws IOException;
 
-	/** Returns an empty result for a missing or empty archive; I/O failures are reported by the future. */
+	/**
+	 * Returns an empty result for a missing or empty archive; I/O failures are reported by the future.
+	 */
 	Future<Optional<ArchivedFile>> retrieveAsync(MetadataDto metadataDto);
 
-	/** The returned resource opens its stream on demand, and the caller must close that stream. */
+	/**
+	 * The returned resource opens its stream on demand, and the caller must close that stream.
+	 */
 	Optional<ArchivedFile> retrieve(MetadataDto metadataDto) throws IOException;
 
 }

@@ -1,8 +1,9 @@
 package de.dmp.server.configuration;
 
 
-import de.dmp.server.service.Archive;
-import de.dmp.server.service.ArchiveService;
+import de.dmp.server.service.archive.Archive;
+import de.dmp.server.service.archive.ArchiveService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.JsonNode;
@@ -27,7 +28,7 @@ public class ArchiveConfig {
 	}
 
 	@Bean(destroyMethod = "close")
-	public Archive archive() {
+	public Archive archive(@Value("${archive.workers:2}") int workers) {
 
 		try (var inputStream = this.getClass()
 		                           .getClassLoader()
@@ -42,7 +43,7 @@ public class ArchiveConfig {
 
 			String uploadDir = uploadDirNode.stringValue();
 			Path dir = Path.of(uploadDir);
-			return new ArchiveService(dir);
+			return new ArchiveService(dir, workers);
 
 		} catch (IOException e) {
 			throw new RuntimeException(e);

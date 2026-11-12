@@ -2,9 +2,9 @@ package de.dmp.server.controller;
 
 
 import de.dmp.server.data.dto.MetadataDto;
-import de.dmp.server.service.Archive;
-import de.dmp.server.service.ArchivedFile;
 import de.dmp.server.service.MetadataService;
+import de.dmp.server.service.archive.Archive;
+import de.dmp.server.service.archive.ArchivedFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
@@ -71,26 +71,31 @@ public class FileController {
 		if (metadata.isEmpty()) return ResponseEntity.notFound()
 		                                             .build();
 
-		Optional<ArchivedFile> archivedFile = archive.retrieveAsync(metadata.get()).get();
-		if (archivedFile.isEmpty()) return ResponseEntity.notFound().build();
+		Optional<ArchivedFile> archivedFile = archive.retrieveAsync(metadata.get())
+		                                             .get();
+		if (archivedFile.isEmpty()) return ResponseEntity.notFound()
+		                                                 .build();
 
 		final var response = ResponseEntity.ok()
-			                                   .contentType(MediaType.APPLICATION_OCTET_STREAM)
-			                                   .header(
-					                                   HttpHeaders.CONTENT_DISPOSITION,
-					                                   ContentDisposition.attachment()
-					                                                     .filename(
-							                                                     metadata.get()
-							                                                             .name(),
-							                                                     StandardCharsets.UTF_8
-					                                                              )
-					                                                     .build()
-					                                                     .toString()
-			                                          );
+		                                   .contentType(MediaType.APPLICATION_OCTET_STREAM)
+		                                   .header(
+				                                   HttpHeaders.CONTENT_DISPOSITION,
+				                                   ContentDisposition.attachment()
+				                                                     .filename(
+						                                                     metadata.get()
+						                                                             .name(),
+						                                                     StandardCharsets.UTF_8
+				                                                              )
+				                                                     .build()
+				                                                     .toString()
+		                                          );
 
-		if (archivedFile.get().size() >= 0) response.contentLength(archivedFile.get().size());
+		if (archivedFile.get()
+		                .size() >= 0) response.contentLength(archivedFile.get()
+		                                                                 .size());
 
-		return response.body(archivedFile.get().content());
+		return response.body(archivedFile.get()
+		                                 .content());
 	}
 
 	@GetMapping("/named/{name}")
