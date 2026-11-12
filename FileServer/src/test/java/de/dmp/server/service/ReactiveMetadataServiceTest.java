@@ -76,6 +76,7 @@ class ReactiveMetadataServiceTest {
 	@Test
 	void insertsNewMetadataWithoutLookingUpTheNewId() {
 		ReactiveMongoTemplate mongo = mock(ReactiveMongoTemplate.class);
+		when(mongo.save(any(Tag.class))).thenAnswer(call -> Mono.just(call.getArgument(0)));
 		when(mongo.insert(any(Metadata.class))).thenAnswer(call -> Mono.just(call.getArgument(0)));
 		var service = new ReactiveMetadataService(mongo, new MetadataMapper());
 		var dto = new MetadataDto(UUID.randomUUID(), "file.txt", "description", "key", Instant.now(), Set.of("tag"));
@@ -86,13 +87,16 @@ class ReactiveMetadataServiceTest {
 		assertEquals(dto.id(), result.getId());
 		assertEquals(dto.createdAt(), result.getCreatedAt());
 		assertEquals("tag", result.getTags().iterator().next().getName());
-		verify(mongo).insert(any(Metadata.class));
+		var order = inOrder(mongo);
+		order.verify(mongo).save(any(Tag.class));
+		order.verify(mongo).insert(any(Metadata.class));
 		verify(mongo, never()).findById(any(), eq(Metadata.class));
 	}
 
 	@Test
 	void updatesExistingMetadataWithoutChangingIdentityOrCreationDate() {
 		ReactiveMongoTemplate mongo = mock(ReactiveMongoTemplate.class);
+		when(mongo.save(any(Tag.class))).thenAnswer(call -> Mono.just(call.getArgument(0)));
 		when(mongo.save(any(Metadata.class))).thenAnswer(call -> Mono.just(call.getArgument(0)));
 		var service = new ReactiveMetadataService(mongo, new MetadataMapper());
 		Metadata existing = new Metadata();
@@ -110,5 +114,8 @@ class ReactiveMetadataServiceTest {
 		assertEquals("replacement.txt", result.getName());
 		assertEquals("new-key", result.getFileLocation());
 		assertEquals("new", result.getTags().iterator().next().getName());
+		var order = inOrder(mongo);
+		order.verify(mongo).save(any(Tag.class));
+		order.verify(mongo).save(any(Metadata.class));
 	}
 }

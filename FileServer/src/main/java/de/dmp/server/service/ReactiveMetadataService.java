@@ -1,6 +1,7 @@
 package de.dmp.server.service;
 
 import de.dmp.server.data.Metadata;
+import de.dmp.server.data.Tag;
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.data.vo.MetadataVO;
 import de.dmp.server.service.mapper.MetadataMapper;
@@ -48,7 +49,7 @@ public class ReactiveMetadataService {
 		return Mono.defer(() -> {
 			Metadata entity = mapper.apply(new MetadataVO(dto));
 			entity.setCreatedAt(dto.createdAt());
-			return mongo.insert(entity);
+			return saveTags(entity).flatMap(mongo::insert);
 		});
 	}
 
@@ -58,7 +59,18 @@ public class ReactiveMetadataService {
 			if (dto.tags() == null) {
 				existing.getTags().clear();
 			}
-			return mongo.save(mapper.apply(validated, existing));
+			return saveTags(mapper.apply(validated, existing)).flatMap(mongo::save);
 		});
+	}
+
+	private Mono<Metadata> saveTags(Metadata metadata) {
+		return Flux.fromIterable(metadata.getTags())
+				.concatMap(tag -> mongo.save(tag))
+				.collectList()
+				.map(savedTags -> {
+					metadata.getTags().clear();
+					metadata.getTags().addAll(savedTags);
+					return metadata;
+				});
 	}
 }
