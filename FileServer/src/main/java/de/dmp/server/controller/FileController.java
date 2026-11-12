@@ -1,8 +1,9 @@
 package de.dmp.server.controller;
 
 
-import de.dmp.server.configuration.Archive;
+import com.github.f4b6a3.ulid.UlidCreator;
 import de.dmp.server.data.dto.MetadataDto;
+import de.dmp.server.service.Archive;
 import de.dmp.server.service.MetadataService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -47,6 +50,11 @@ public class FileController {
 		this.archive = archive;
 	}
 
+	private static void deleteTempFile(Path destination) {
+
+		if (!destination.toFile()
+		                .delete()) log.debug("Failed to clean File {}", destination.getFileName());
+	}
 
 	private static void deleteArchive(Path uploadDir, String storageKey) {
 
@@ -57,20 +65,11 @@ public class FileController {
 		}
 	}
 
-
-	private static void deleteTempFile(Path destination) {
-
-		if (!destination.toFile()
-		                .delete()) log.debug("Failed to clean File {}", destination.getFileName());
-	}
-
-
 	@GetMapping("/all")
 	public List<MetadataDto> listFiles() {
 
 		return metadataService.findAll();
 	}
-
 
 	@GetMapping("/tagged/{tag}")
 	public List<MetadataDto> listFilesByTag(@PathVariable("tag") String tagName) {
@@ -78,13 +77,11 @@ public class FileController {
 		return metadataService.findByTagName(tagName);
 	}
 
-
 	@GetMapping("/{id}")
 	public Optional<MetadataDto> getFileById(@PathVariable("id") UUID id) {
 
 		return metadataService.findById(id);
 	}
-
 
 	@GetMapping("/{id}/download")
 	public Mono<ResponseEntity<Resource>> download(@PathVariable("id") UUID id) {
@@ -93,33 +90,31 @@ public class FileController {
 		           .subscribeOn(Schedulers.boundedElastic());
 	}
 
-
-	private ResponseEntity<Resource> openDownload(UUID id) throws IOException {
+	private ResponseEntity<Resource> openDownload(UUID id) throws IOException, ExecutionException, InterruptedException {
 
 		final Optional<MetadataDto> metadata = metadataService.findById(id);
 		if (metadata.isEmpty()) return ResponseEntity.notFound()
 		                                             .build();
 
-		final Path root = archive.getUploadDir()
-		                         .toAbsolutePath()
-		                         .normalize();
-		final Path archive = root.resolve("%s.zip".formatted(metadata.get()
-		                                                             .fileLocation()))
-		                         .normalize();
-		if (!archive.startsWith(root) || !Files.isRegularFile(archive)) {
-			log.warn("Archive missing for file {}", id);
-			return ResponseEntity.notFound()
-			                     .build();
-		}
+		final Future<ZipFile> zipFuture = archive.retrieveAsync(metadata.get());
 
-		final ZipFile zip = new ZipFile(archive.toFile());
+		ZipFile zip = zipFuture.get();
+
+		if (zipFuture.isDone() && zip == null) return ResponseEntity.notFound()
+		                                                            .build();
+
+
 		try {
+
 			final var entries = zip.entries();
+
 			if (!entries.hasMoreElements()) {
 				zip.close();
+
 				return ResponseEntity.notFound()
 				                     .build();
 			}
+
 			final ZipEntry entry = entries.nextElement();
 			// closing the entry stream also closes the archive once the response is fully written
 			final InputStream in = new FilterInputStream(zip.getInputStream(entry)) {
@@ -158,7 +153,6 @@ public class FileController {
 		}
 	}
 
-
 	@GetMapping("/named/{name}")
 	public List<MetadataDto> getFilesByName(@PathVariable("name") String name) {
 
@@ -167,17 +161,18 @@ public class FileController {
 				              .regex(name, "i"));
 	}
 
-
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public Mono<ResponseEntity<String>> upload(
 			@RequestPart("file") FilePart file,
 			@RequestPart("metadata") UploadMetadataRequest metadata
 	                                          ) {
 
-		final String storageKey = UUID.randomUUID()
-		                              .toString(); // don't use the client filename as a path
+		final String storageKey = UlidCreator.getUlid()
+		                                     .toString();
+
 		final Path destination = archive.getUploadDir()
 		                                .resolve("tmp%s".formatted(storageKey));
+
 		final Path archivePath = archive.getUploadDir()
 		                                .resolve("%s.zip".formatted(storageKey));
 
@@ -186,7 +181,7 @@ public class FileController {
 			persisting.set(true);
 			try {
 				new Zip(destination, archivePath).run();
-				new CreateOrUpdateFileEntry(file, metadata, storageKey, metadataService, archive.getUploadDir()).run();
+
 			} catch (RuntimeException ex) {
 				deleteArchive(archive.getUploadDir(), storageKey);
 				throw ex;
@@ -209,7 +204,6 @@ public class FileController {
 		           });
 	}
 
-
 	private record CreateOrUpdateFileEntry(
 			FilePart file, UploadMetadataRequest metadata, String storageKey,
 			MetadataService metadataService, Path uploadDir
@@ -231,7 +225,6 @@ public class FileController {
 		}
 
 	}
-
 
 	private record Zip(Path source, Path target) implements Runnable {
 

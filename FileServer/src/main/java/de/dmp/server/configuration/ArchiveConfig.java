@@ -1,6 +1,8 @@
 package de.dmp.server.configuration;
 
 
+import de.dmp.server.service.Archive;
+import de.dmp.server.service.ArchiveService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.JsonNode;
@@ -40,8 +42,8 @@ public class ArchiveConfig {
 
 			String uploadDir = uploadDirNode.stringValue();
 			Path dir = Path.of(uploadDir);
-			return new Archive(dir);
-			
+			return new ArchiveService(dir);
+
 		} catch (IOException e) {
 			throw new RuntimeException(e);
 		}
