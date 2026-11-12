@@ -1,11 +1,12 @@
 package de.dmp.server.controller;
 
 
-import de.dmp.server.configuration.Archive;
 import de.dmp.server.data.dto.MetadataDto;
+import de.dmp.server.service.ArchiveService;
 import de.dmp.server.service.MetadataService;
 import de.dmp.server.service.criteria.MongoSpecification;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -44,6 +45,7 @@ class FileControllerTest {
 	private MetadataService metadataService;
 
 	private FileController controller;
+	private ArchiveService archive;
 
 
 	private static MetadataDto metadata(UUID id, String name, String fileLocation) {
@@ -99,9 +101,14 @@ class FileControllerTest {
 	void setUp() throws IOException {
 
 		metadataService = mock(MetadataService.class);
-		controller = new FileController(metadataService, new Archive(uploadDir));
+		archive = new ArchiveService(uploadDir);
+		controller = new FileController(metadataService, archive);
 	}
 
+	@AfterEach
+	void tearDown() {
+		archive.close();
+	}
 
 	@Nested
 	class ListFiles {
@@ -247,6 +254,18 @@ class FileControllerTest {
 			assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
 		}
 
+		@Test
+		void propagatesCorruptArchiveErrors() throws IOException {
+			UUID id = UUID.randomUUID();
+			when(metadataService.findById(id)).thenReturn(Optional.of(metadata(id, "report.txt", "bad-archive")));
+			Files.writeString(uploadDir.resolve("bad-archive.zip"), "not a zip");
+
+			Throwable failure = assertThrows(RuntimeException.class,
+					() -> controller.download(id).block(Duration.ofSeconds(5)));
+			assertInstanceOf(java.util.concurrent.ExecutionException.class, failure.getCause());
+			assertInstanceOf(IOException.class, failure.getCause().getCause());
+		}
+
 	}
 
 
@@ -312,7 +331,9 @@ class FileControllerTest {
 					       .tags()
 			            );
 			assertArchiveContains(uploadDir.resolve(response.getBody() + ".zip"), contents);
-			assertFalse(Files.exists(uploadDir.resolve("tmp" + response.getBody())));
+			try (var files = Files.list(uploadDir)) {
+				assertEquals(1, files.count());
+			}
 			verify(metadataService, never()).update(any(), any());
 		}
 
@@ -355,6 +376,51 @@ class FileControllerTest {
 			assertFalse(Files.exists(uploadDir.resolve("old-storage-key.zip")));
 			assertArchiveContains(uploadDir.resolve(response.getBody() + ".zip"), contents);
 			verify(metadataService, never()).create(any());
+		}
+
+		@Test
+		void removesNewArchiveIfMetadataPersistenceFails() throws IOException {
+			FilePart file = filePart("report.txt", "contents".getBytes());
+			doThrow(new IllegalStateException("metadata failed")).when(metadataService).create(any());
+
+			assertThrows(IllegalStateException.class, () -> controller.upload(
+					file, new UploadMetadataRequest(null, "description", Set.of())
+			).block(Duration.ofSeconds(5)));
+			try (var files = Files.list(uploadDir)) {
+				assertEquals(0, files.count());
+			}
+		}
+
+		@Test
+		void doesNotPersistMetadataWhenTransferFails() throws IOException {
+			FilePart file = mock(FilePart.class);
+			when(file.transferTo(any(Path.class))).thenReturn(Mono.error(new IOException("transfer failed")));
+
+			assertThrows(RuntimeException.class, () -> controller.upload(
+					file, new UploadMetadataRequest(null, "description", Set.of())
+			).block(Duration.ofSeconds(5)));
+			verifyNoInteractions(metadataService);
+			try (var files = Files.list(uploadDir)) {
+				assertEquals(0, files.count());
+			}
+		}
+
+		@Test
+		void preservesReplacedArchiveWhenMetadataUpdateFails() throws IOException {
+			UUID id = UUID.randomUUID();
+			Files.writeString(uploadDir.resolve("old-storage-key.zip"), "old archive");
+			when(metadataService.findById(id))
+					.thenReturn(Optional.of(metadata(id, "old.txt", "old-storage-key")));
+			doThrow(new IllegalStateException("metadata failed")).when(metadataService).update(eq(id), any());
+
+			assertThrows(IllegalStateException.class, () -> controller.upload(
+					filePart("replacement.txt", "contents".getBytes()),
+					new UploadMetadataRequest(id, "description", Set.of())
+			).block(Duration.ofSeconds(5)));
+			assertEquals("old archive", Files.readString(uploadDir.resolve("old-storage-key.zip")));
+			try (var files = Files.list(uploadDir)) {
+				assertEquals(1, files.count());
+			}
 		}
 
 	}

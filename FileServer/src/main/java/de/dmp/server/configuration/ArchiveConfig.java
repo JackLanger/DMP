@@ -26,7 +26,7 @@ public class ArchiveConfig {
 			throw new IOException("Resource not found: app.yaml");
 	}
 
-	@Bean
+	@Bean(destroyMethod = "close")
 	public Archive archive() {
 
 		try (var inputStream = this.getClass()

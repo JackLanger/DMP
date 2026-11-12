@@ -1,13 +1,12 @@
 package de.dmp.server.controller;
 
 
-import com.github.f4b6a3.ulid.UlidCreator;
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.service.Archive;
+import de.dmp.server.service.ArchivedFile;
 import de.dmp.server.service.MetadataService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.http.*;
@@ -16,21 +15,12 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
 
 
 @Slf4j
@@ -48,21 +38,6 @@ public class FileController {
 
 		this.metadataService = metadataService;
 		this.archive = archive;
-	}
-
-	private static void deleteTempFile(Path destination) {
-
-		if (!destination.toFile()
-		                .delete()) log.debug("Failed to clean File {}", destination.getFileName());
-	}
-
-	private static void deleteArchive(Path uploadDir, String storageKey) {
-
-		try {
-			Files.deleteIfExists(uploadDir.resolve("%s.zip".formatted(storageKey)));
-		} catch (IOException ex) {
-			log.warn("Failed to delete archive for {}", storageKey, ex);
-		}
 	}
 
 	@GetMapping("/all")
@@ -90,47 +65,16 @@ public class FileController {
 		           .subscribeOn(Schedulers.boundedElastic());
 	}
 
-	private ResponseEntity<Resource> openDownload(UUID id) throws IOException, ExecutionException, InterruptedException {
+	private ResponseEntity<Resource> openDownload(UUID id) throws ExecutionException, InterruptedException {
 
 		final Optional<MetadataDto> metadata = metadataService.findById(id);
 		if (metadata.isEmpty()) return ResponseEntity.notFound()
 		                                             .build();
 
-		final Future<ZipFile> zipFuture = archive.retrieveAsync(metadata.get());
+		Optional<ArchivedFile> archivedFile = archive.retrieveAsync(metadata.get()).get();
+		if (archivedFile.isEmpty()) return ResponseEntity.notFound().build();
 
-		ZipFile zip = zipFuture.get();
-
-		if (zipFuture.isDone() && zip == null) return ResponseEntity.notFound()
-		                                                            .build();
-
-
-		try {
-
-			final var entries = zip.entries();
-
-			if (!entries.hasMoreElements()) {
-				zip.close();
-
-				return ResponseEntity.notFound()
-				                     .build();
-			}
-
-			final ZipEntry entry = entries.nextElement();
-			// closing the entry stream also closes the archive once the response is fully written
-			final InputStream in = new FilterInputStream(zip.getInputStream(entry)) {
-
-				@Override
-				public void close() throws IOException {
-
-					try {
-						super.close();
-					} finally {
-						zip.close();
-					}
-				}
-			};
-
-			final var response = ResponseEntity.ok()
+		final var response = ResponseEntity.ok()
 			                                   .contentType(MediaType.APPLICATION_OCTET_STREAM)
 			                                   .header(
 					                                   HttpHeaders.CONTENT_DISPOSITION,
@@ -144,13 +88,9 @@ public class FileController {
 					                                                     .toString()
 			                                          );
 
-			if (entry.getSize() >= 0) response.contentLength(entry.getSize());
+		if (archivedFile.get().size() >= 0) response.contentLength(archivedFile.get().size());
 
-			return response.body(new InputStreamResource(in));
-		} catch (IOException | RuntimeException ex) {
-			zip.close();
-			throw ex;
-		}
+		return response.body(archivedFile.get().content());
 	}
 
 	@GetMapping("/named/{name}")
@@ -167,83 +107,45 @@ public class FileController {
 			@RequestPart("metadata") UploadMetadataRequest metadata
 	                                          ) {
 
-		final String storageKey = UlidCreator.getUlid()
-		                                     .toString();
-
-		final Path destination = archive.getUploadDir()
-		                                .resolve("tmp%s".formatted(storageKey));
-
-		final Path archivePath = archive.getUploadDir()
-		                                .resolve("%s.zip".formatted(storageKey));
-
-		final AtomicBoolean persisting = new AtomicBoolean();
-		final Runnable zipAndPersist = () -> {
-			persisting.set(true);
-			try {
-				new Zip(destination, archivePath).run();
-
-			} catch (RuntimeException ex) {
-				deleteArchive(archive.getUploadDir(), storageKey);
-				throw ex;
-			} finally {
-				deleteTempFile(destination);
-			}
-		};
-
-		// cache() keeps the task running to completion if the client cancels, so cleanup is owned by the task itself
-		final Mono<Void> persist = Mono.<Void>fromRunnable(zipAndPersist)
-		                               .subscribeOn(Schedulers.boundedElastic())
-		                               .cache();
-
-		return file.transferTo(destination)
-		           .then(persist)
-		           .thenReturn(ResponseEntity.status(HttpStatus.CREATED)
-		                                     .body(storageKey))
-		           .doFinally(_ -> {
-			           if (!persisting.get()) deleteTempFile(destination);
-		           });
+		// Do not cancel the storage and metadata task when the response subscriber disconnects.
+		return Mono.fromCallable(() -> persistUpload(file, metadata))
+		           .subscribeOn(Schedulers.boundedElastic())
+		           .cache();
 	}
 
-	private record CreateOrUpdateFileEntry(
-			FilePart file, UploadMetadataRequest metadata, String storageKey,
-			MetadataService metadataService, Path uploadDir
-	) implements Runnable {
+	private ResponseEntity<String> persistUpload(FilePart file, UploadMetadataRequest metadata)
+			throws ExecutionException, InterruptedException {
 
-		public void run() {
-
-			Optional<MetadataDto> existing = Optional.ofNullable(metadata.uuid())
-			                                         .flatMap(metadataService::findById);
+		String storageKey = archive.storeAsync(file)
+		                           .get();
+		Optional<MetadataDto> existing;
+		try {
+			existing = Optional.ofNullable(metadata.uuid())
+			                   .flatMap(metadataService::findById);
 			MetadataDto replacement = new MetadataDto(file.name(), metadata.description(), storageKey, metadata.tags());
-
 			if (existing.isPresent()) {
 				metadataService.update(metadata.uuid(), replacement);
 			} else {
 				metadataService.create(replacement);
 			}
-
-			existing.ifPresent(old -> deleteArchive(uploadDir(), old.fileLocation()));
-		}
-
-	}
-
-	private record Zip(Path source, Path target) implements Runnable {
-
-		@Override
-		public void run() {
-
-			try (var outputStream = Files.newOutputStream(target);
-			     ZipOutputStream zip = new ZipOutputStream(outputStream)) {
-
-				zip.putNextEntry(new ZipEntry(source.getFileName()
-				                                    .toString()));
-				Files.copy(source, zip);
-				zip.closeEntry();
-
-			} catch (IOException e) {
-				throw new RuntimeException(e);
+		} catch (RuntimeException ex) {
+			try {
+				archive.delete(storageKey);
+			} catch (IOException cleanup) {
+				ex.addSuppressed(cleanup);
 			}
+			throw ex;
 		}
+		existing.ifPresent(old -> {
+			try {
+				archive.delete(old.fileLocation());
+			} catch (IOException ex) {
+				log.warn("Failed to delete archive for {}", old.fileLocation(), ex);
+			}
+		});
 
+		return ResponseEntity.status(HttpStatus.CREATED)
+		                     .body(storageKey);
 	}
 
 }
