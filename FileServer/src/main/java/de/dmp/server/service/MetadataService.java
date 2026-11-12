@@ -52,17 +52,7 @@ public class MetadataService extends BaseCrudService<MetadataDto, Metadata, java
 	@Override
 	protected MetadataDto mapToDto(Metadata metadata) {
 
-		return new MetadataDto(
-				metadata.getId(),
-				metadata.getName(),
-				metadata.getDescription(),
-				metadata.getFileLocation(),
-				metadata.getCreatedAt(),
-				metadata.getTags()
-				        .stream()
-				        .map(Tag::getName)
-				        .collect(Collectors.toSet())
-		);
+		return metadataMapper.toDto(metadata);
 	}
 
 	@Override

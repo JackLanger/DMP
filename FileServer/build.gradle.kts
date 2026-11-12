@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.spring)
@@ -13,7 +15,6 @@ plugins {
 
 group = "de.dmp.server"
 version = File("FileServer/VERSION").readText().trim()
-val database = "fileserver";
 
 java {
     toolchain {
@@ -37,6 +38,7 @@ dependencies {
     implementation(libs.bundles.spring.mongo)
     implementation(libs.bundles.spring.other)
 
+    implementation(libs.yaml)
     implementation(libs.ulid.creator)
     implementation(libs.gzip)
 
@@ -102,12 +104,34 @@ tasks.asciidoctor {
 }
 
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
-    environment(
-        "SPRING_MONGODB_URI",
-        System.getenv("SPRING_MONGODB_URI")
-            ?: "mongodb://root:secret@localhost:27017/$database?authSource=admin"
-    )
+    val envFile = project.file(".env")
+    val settings = Properties().apply {
+        if (envFile.isFile) envFile.inputStream().use { load(it) }
+    }
+    if (System.getenv("SPRING_SECURITY_USER_PASSWORD") == null) {
+        settings.getProperty("FILESERVER_PASSWORD")?.let { password ->
+            require(password.isNotBlank()) { "FILESERVER_PASSWORD must not be empty" }
+            environment("SPRING_SECURITY_USER_PASSWORD", password)
+        }
+    }
+    if (System.getenv("SPRING_MONGODB_URI") == null && envFile.isFile) {
+        val user = settings.getProperty("MONGO_APP_USER")
+        val password = settings.getProperty("MONGO_APP_PASSWORD")
+        if (user != null || password != null) {
+            val database = settings.getProperty("MONGO_DATABASE")
+            require(!database.isNullOrEmpty() && !user.isNullOrEmpty() && !password.isNullOrEmpty()) {
+                "Set MONGO_DATABASE, MONGO_APP_USER and MONGO_APP_PASSWORD in FileServer/.env"
+            }
+            require(database.matches(Regex("[A-Za-z0-9_-]+")) &&
+                user.matches(Regex("[A-Za-z0-9._~-]+")) &&
+                password.matches(Regex("[A-Za-z0-9._~-]+"))) {
+                "MongoDB application credentials or database name contain unsupported characters"
+            }
+            environment("SPRING_MONGODB_URI", "mongodb://$user:$password@localhost:27017/$database?authSource=$database")
+        }
+    }
     systemProperty("spring.profiles.active", "dev")
+    systemProperty("spring.docker.compose.enabled", "false")
 }
 
 tasks.jar { enabled = false }
