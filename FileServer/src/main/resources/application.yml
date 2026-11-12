@@ -19,3 +19,6 @@ spring:
 archive:
   workers: ${ARCHIVE_WORKERS:2}
   upload: ${ARCHIVE_UPLOAD_DIR:data/archive}
+  transfers:
+    expiry: ${ARCHIVE_TRANSFER_EXPIRY:PT24H}
+    cleanup-interval: ${ARCHIVE_TRANSFER_CLEANUP_INTERVAL:3600000}

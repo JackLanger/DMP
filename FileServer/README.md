@@ -64,3 +64,36 @@ Uploads require `file` and JSON `metadata` multipart parts. The HTTP server
 requires authentication and CSRF protection; restart it after configuration
 changes. The former SOAP starter was removed because it selected Spring MVC;
 there are currently no SOAP endpoints in FileServer.
+
+## Resumable transfers
+
+For uploads that may be interrupted, create a session with
+`POST /files/transfers` and JSON containing `filename`, `size`, `sha256`
+(hexadecimal SHA-256 of the complete file), `description`, and `tags`. The
+response includes a stable `transferId`, `offset`, `length`, and `expiresAt`.
+Persist the transfer ID on the client and query `GET` or `HEAD
+/files/transfers/{transferId}` after reconnecting to recover the current
+`Upload-Offset`.
+
+Send chunks as `PATCH /files/transfers/{transferId}` with
+`Content-Type: application/octet-stream` and a `Content-Range` header such as
+`bytes 0-262143/900000`. Chunks must be sequential and at most 256 KiB. A retry
+of an already accepted range is acknowledged only when its bytes match the
+stored content; conflicting retries and offsets receive `409 Conflict`. Once
+the full file is present, `POST /files/transfers/{transferId}/complete`
+verifies the declared checksum, stores the archive, and creates metadata with
+the transfer ID as its document ID. Repeating completion returns the same
+document ID. `DELETE /files/transfers/{transferId}` abandons the session.
+
+Partial chunks and checkpoints are stored under `.transfers` in the archive
+directory, so sessions survive FileServer restarts. `ARCHIVE_TRANSFER_EXPIRY`
+sets the inactivity lifetime (default `PT24H`); expired sessions are removed
+periodically according to `ARCHIVE_TRANSFER_CLEANUP_INTERVAL` (default one
+hour). Completed document archives are not removed when their transfer
+checkpoint expires.
+
+Downloads from `GET /files/{id}/download` support one HTTP byte range and return
+`206 Partial Content`, `Content-Range`, and `Accept-Ranges`. The response ETag
+is the SHA-256 of the uncompressed document content, allowing clients to use
+`If-Range` when resuming; a changed validator falls back to a full `200`
+response. Invalid or unsatisfiable ranges return `416 Range Not Satisfiable`.

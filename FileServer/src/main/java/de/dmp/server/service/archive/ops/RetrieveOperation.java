@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -70,8 +72,22 @@ public record RetrieveOperation(MetadataDto metadata) implements ArchiveOperatio
 			ZipEntry entry = entries.nextElement();
 			String entryName = entry.getName();
 			return Optional.of(new ArchivedFile(
-					new InputStreamResource(() -> openEntry(archive, entryName)), entry.getSize()
+					new InputStreamResource(() -> openEntry(archive, entryName)), entry.getSize(),
+					checksum(archive, entryName)
 			));
+		}
+	}
+
+	private String checksum(Path archive, String entryName) throws IOException {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			try (InputStream input = openEntry(archive, entryName)) {
+				byte[] buffer = new byte[8192];
+				for (int count; (count = input.read(buffer)) != -1; ) digest.update(buffer, 0, count);
+			}
+			return java.util.HexFormat.of().formatHex(digest.digest());
+		} catch (NoSuchAlgorithmException ex) {
+			throw new IllegalStateException("SHA-256 is unavailable", ex);
 		}
 	}
 
