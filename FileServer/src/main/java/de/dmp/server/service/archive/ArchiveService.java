@@ -5,6 +5,7 @@ import de.dmp.server.service.archive.ops.ArchiveOperation;
 import de.dmp.server.service.archive.ops.DeleteOperation;
 import de.dmp.server.service.archive.ops.RetrieveOperation;
 import de.dmp.server.service.archive.ops.StoreOperation;
+import de.dmp.server.service.archive.ops.StorePathOperation;
 import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -40,6 +41,11 @@ public class ArchiveService implements Archive {
 	@Override
 	public Mono<String> store(FilePart file) {
 		return execute(new StoreOperation(file));
+	}
+
+	@Override
+	public Mono<String> store(Path source, String filename, String storageKey) {
+		return execute(new StorePathOperation(source, filename, storageKey));
 	}
 
 	@Override

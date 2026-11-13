@@ -92,6 +92,32 @@ class ArchiveServiceTest {
 	}
 
 	@Test
+	void storesCompletedTransferIdempotentlyAndVerifiesContent() throws Exception {
+		byte[] contents = "resumable contents".getBytes();
+		Path source = uploadDir.resolve("completed.part");
+		Files.write(source, contents);
+		String key = java.util.UUID.randomUUID().toString();
+
+		assertEquals(key, archive.store(source, "report.txt", key).block(Duration.ofSeconds(5)));
+		assertEquals(key, archive.store(source, "report.txt", key).block(Duration.ofSeconds(5)));
+
+		MetadataDto metadata = new MetadataDto("report.txt", "description", key, Set.of());
+		ArchivedFile result = archive.retrieve(metadata).block(Duration.ofSeconds(5));
+		assertNotNull(result);
+		assertEquals(java.util.HexFormat.of().formatHex(
+				java.security.MessageDigest.getInstance("SHA-256").digest(contents)), result.sha256());
+		try (var input = result.content().getInputStream()) {
+			assertArrayEquals(contents, input.readAllBytes());
+		}
+
+		Files.writeString(source, "different contents");
+		assertThrows(RuntimeException.class, () -> archive.store(source, "report.txt", key).block(Duration.ofSeconds(5)));
+		try (var input = archive.retrieve(metadata).block(Duration.ofSeconds(5)).content().getInputStream()) {
+			assertArrayEquals(contents, input.readAllBytes());
+		}
+	}
+
+	@Test
 	void transferFailuresAreReportedAndTemporaryFilesRemoved() throws Exception {
 
 		FilePart file = mock(FilePart.class);

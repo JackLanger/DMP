@@ -10,6 +10,8 @@ Set `ARCHIVE_WORKERS` to a positive integer to configure the pool size. The
 default is two. The scheduler is disposed when the application closes.
 
 The scheduler backlog is bounded and in memory; it is not recoverable after a
-restart. Uploads wait for archive and metadata persistence before responding.
-Durable job records, recovery, job status, and asynchronous upload responses
-are not implemented.
+restart. Regular multipart uploads wait for archive and metadata persistence
+before responding. The FileServer also exposes a separate resumable upload
+protocol whose chunk data and byte checkpoints are persisted in the archive
+directory; it does not persist general archive jobs or expose asynchronous job
+status.

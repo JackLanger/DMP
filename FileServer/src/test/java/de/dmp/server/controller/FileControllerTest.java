@@ -5,6 +5,7 @@ import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.data.Metadata;
 import de.dmp.server.service.ReactiveMetadataService;
 import de.dmp.server.service.archive.ArchiveService;
+import de.dmp.server.service.transfer.ResumableTransferService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -14,6 +15,7 @@ import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -51,6 +53,7 @@ class FileControllerTest {
 
 	private FileController controller;
 	private ArchiveService archive;
+	private ResumableTransferService transfers;
 
 
 	private static MetadataDto metadata(UUID id, String name, String fileLocation) {
@@ -101,15 +104,23 @@ class FileControllerTest {
 		}
 	}
 
+	private long archiveCount() throws IOException {
+		try (var files = Files.list(uploadDir)) {
+			return files.filter(path -> path.getFileName().toString().endsWith(".zip")).count();
+		}
+	}
+
 
 	@BeforeEach
 	void setUp() throws IOException {
 
 		uploadMetadataService = mock(ReactiveMetadataService.class);
 		when(uploadMetadataService.create(any())).thenAnswer(invocation -> Mono.just(new Metadata()));
+		when(uploadMetadataService.findById(any(UUID.class))).thenReturn(Mono.empty());
 		when(uploadMetadataService.update(any(), any())).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 		archive = new ArchiveService(uploadDir);
-		controller = new FileController(archive, uploadMetadataService);
+		transfers = new ResumableTransferService(uploadDir, Duration.ofHours(24));
+		controller = new FileController(archive, uploadMetadataService, transfers);
 	}
 
 	@AfterEach
@@ -214,8 +225,9 @@ class FileControllerTest {
 			var mockedArchive = mock(de.dmp.server.service.archive.Archive.class);
 			when(mockedArchive.retrieve(any())).thenReturn(Mono.just(
 					new de.dmp.server.service.archive.ArchivedFile(content, content.contentLength())));
-			var reactiveController = new FileController(mockedArchive, uploadMetadataService);
-			DataBuffer data = reactiveController.download(id).flatMap(response -> DataBufferUtils.join(response.getBody()))
+			var reactiveController = new FileController(mockedArchive, uploadMetadataService, transfers);
+			DataBuffer data = reactiveController.download(id, null, null)
+					.flatMap(response -> DataBufferUtils.join(response.getBody()))
 					.subscribeOn(reactor.core.scheduler.Schedulers.parallel()).block(Duration.ofSeconds(5));
 			assertNotNull(data);
 			DataBufferUtils.release(data);
@@ -230,7 +242,7 @@ class FileControllerTest {
 			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "archive-key")));
 			writeArchive(uploadDir.resolve("archive-key.zip"), contents);
 
-			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id, null, null)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -261,6 +273,30 @@ class FileControllerTest {
 			verify(uploadMetadataService).findDtoById(id);
 		}
 
+		@Test
+		void returnsRequestedByteRange() throws IOException {
+			UUID id = UUID.randomUUID();
+			byte[] contents = "range contents".getBytes();
+			when(uploadMetadataService.findDtoById(id))
+					.thenReturn(Mono.just(metadata(id, "report.txt", "range-key")));
+			writeArchive(uploadDir.resolve("range-key.zip"), contents);
+
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id, "bytes=2-6", null)
+					.block(Duration.ofSeconds(5));
+
+			assertNotNull(response);
+			assertEquals(HttpStatus.PARTIAL_CONTENT, response.getStatusCode());
+			assertEquals("bytes 2-6/14", response.getHeaders().getFirst("Content-Range"));
+			assertEquals(5, response.getHeaders().getContentLength());
+			assert response.getBody() != null;
+			DataBuffer data = DataBufferUtils.join(response.getBody()).block(Duration.ofSeconds(5));
+			assertNotNull(data);
+			byte[] actual = new byte[data.readableByteCount()];
+			data.read(actual);
+			DataBufferUtils.release(data);
+			assertArrayEquals("nge c".getBytes(), actual);
+		}
+
 
 		@Test
 		void returnsNotFoundWhenMetadataDoesNotExist() {
@@ -268,7 +304,7 @@ class FileControllerTest {
 			UUID id = UUID.randomUUID();
 			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.empty());
 
-			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id, null, null)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -283,7 +319,7 @@ class FileControllerTest {
 			UUID id = UUID.randomUUID();
 			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "missing-archive")));
 
-			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id, null, null)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -298,7 +334,7 @@ class FileControllerTest {
 			when(uploadMetadataService.findDtoById(id)).thenReturn(Mono.just(metadata(id, "report.txt", "empty-archive")));
 			writeArchive(uploadDir.resolve("empty-archive.zip"));
 
-			ResponseEntity<Flux<DataBuffer>> response = controller.download(id)
+			ResponseEntity<Flux<DataBuffer>> response = controller.download(id, null, null)
 			                                              .block(Duration.ofSeconds(5));
 
 			assertNotNull(response);
@@ -313,7 +349,7 @@ class FileControllerTest {
 			Files.writeString(uploadDir.resolve("bad-archive.zip"), "not a zip");
 
 			Throwable failure = assertThrows(RuntimeException.class,
-			                                 () -> controller.download(id)
+			                                 () -> controller.download(id, null, null)
 			                                                 .block(Duration.ofSeconds(5)));
 			assertInstanceOf(IOException.class, failure.getCause());
 		}
@@ -336,6 +372,65 @@ class FileControllerTest {
 
 	}
 
+
+	@Nested
+	class ResumableUpload {
+
+		@Test
+		void resumesChunksAndCompletesTheDocumentOnlyOnce() throws Exception {
+			byte[] contents = "resumable transfer".getBytes();
+			String sha256 = java.util.HexFormat.of().formatHex(
+					java.security.MessageDigest.getInstance("SHA-256").digest(contents));
+			WebTestClient client = WebTestClient.bindToController(controller).build();
+			TransferStatus started = client.post().uri("/files/transfers")
+					.contentType(MediaType.APPLICATION_JSON)
+					.bodyValue(new ResumableUploadRequest("report.txt", contents.length, sha256,
+							"description", Set.of("research")))
+					.exchange()
+					.expectStatus().isCreated()
+					.expectHeader().exists("Location")
+					.expectBody(TransferStatus.class).returnResult().getResponseBody();
+			assertNotNull(started);
+			UUID id = started.transferId();
+			byte[] firstChunk = java.util.Arrays.copyOfRange(contents, 0, 6);
+			client.patch().uri("/files/transfers/{id}", id)
+					.header(HttpHeaders.CONTENT_RANGE, "bytes 0-5/" + contents.length)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM)
+					.bodyValue(firstChunk)
+					.exchange()
+					.expectStatus().isNoContent()
+					.expectHeader().valueEquals("Upload-Offset", "6");
+			client.patch().uri("/files/transfers/{id}", id)
+					.header(HttpHeaders.CONTENT_RANGE, "bytes 0-5/" + contents.length)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM)
+					.bodyValue(firstChunk)
+					.exchange()
+					.expectStatus().isNoContent();
+			byte[] finalChunk = java.util.Arrays.copyOfRange(contents, 6, contents.length);
+			client.patch().uri("/files/transfers/{id}", id)
+					.header(HttpHeaders.CONTENT_RANGE, "bytes 6-" + (contents.length - 1) + "/" + contents.length)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM)
+					.bodyValue(finalChunk)
+					.exchange()
+					.expectStatus().isNoContent()
+					.expectHeader().valueEquals("Upload-Offset", Integer.toString(contents.length));
+
+			TransferCompletion completed = client.post().uri("/files/transfers/{id}/complete", id)
+					.exchange()
+					.expectStatus().isOk()
+					.expectBody(TransferCompletion.class).returnResult().getResponseBody();
+			TransferCompletion retried = client.post().uri("/files/transfers/{id}/complete", id)
+					.exchange()
+					.expectStatus().isOk()
+					.expectBody(TransferCompletion.class).returnResult().getResponseBody();
+			assertNotNull(completed);
+			assertEquals(id, completed.documentId());
+			assertEquals(completed, retried);
+			assertArchiveContains(uploadDir.resolve(id + ".zip"), contents);
+			verify(uploadMetadataService, times(1)).create(any());
+		}
+
+	}
 
 	@Nested
 	class Upload {
@@ -399,9 +494,7 @@ class FileControllerTest {
 					       .tags()
 			            );
 			assertArchiveContains(uploadDir.resolve(response.getBody() + ".zip"), contents);
-			try (var files = Files.list(uploadDir)) {
-				assertEquals(1, files.count());
-			}
+			assertEquals(1, archiveCount());
 			verify(uploadMetadataService, never()).update(any(), any());
 		}
 
@@ -458,9 +551,7 @@ class FileControllerTest {
 					                                                          file, new UploadMetadataRequest(null, "description", Set.of())
 			                                                                 )
 			                                                          .block(Duration.ofSeconds(5)));
-			try (var files = Files.list(uploadDir)) {
-				assertEquals(0, files.count());
-			}
+			assertEquals(0, archiveCount());
 		}
 
 		@Test
@@ -474,9 +565,7 @@ class FileControllerTest {
 			                                                            )
 			                                                     .block(Duration.ofSeconds(5)));
 			verify(uploadMetadataService, never()).create(any());
-			try (var files = Files.list(uploadDir)) {
-				assertEquals(0, files.count());
-			}
+			assertEquals(0, archiveCount());
 		}
 
 		@Test
@@ -496,9 +585,7 @@ class FileControllerTest {
 			                                                                 )
 			                                                          .block(Duration.ofSeconds(5)));
 			assertEquals("old archive", Files.readString(uploadDir.resolve("old-storage-key.zip")));
-			try (var files = Files.list(uploadDir)) {
-				assertEquals(1, files.count());
-			}
+			assertEquals(1, archiveCount());
 		}
 
 	}
