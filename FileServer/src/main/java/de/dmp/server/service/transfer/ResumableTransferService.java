@@ -186,14 +186,14 @@ public class ResumableTransferService {
 		} catch (IOException ex) {
 			throw new IllegalStateException("Could not remove transfer session", ex);
 		}
+	}
 
-		public synchronized boolean beginFinalization(UUID id) {
-			return finalizing.add(id);
-		}
+	public synchronized boolean beginFinalization(UUID id) {
+		return finalizing.add(id);
+	}
 
-		public synchronized void endFinalization(UUID id) {
-			finalizing.remove(id);
-		}
+	public synchronized void endFinalization(UUID id) {
+		finalizing.remove(id);
 	}
 
 	@Scheduled(fixedDelayString = "${archive.transfers.cleanup-interval:3600000}")
