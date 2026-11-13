@@ -81,7 +81,7 @@ there are currently no SOAP endpoints in FileServer.
 
 ## Resumable transfers
 
-See [TRANSFER-API.md](TRANSFER-API.md) for the complete protocol and a Node.js
+See [TRANSFER-API.md](../docs/FileServer/TRANSFER-API.md) for the complete protocol and a Node.js
 upload and resume example.
 
 For uploads that may be interrupted, create a session with
