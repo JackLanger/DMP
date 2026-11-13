@@ -60,12 +60,29 @@ blocking ZIP and filesystem operations run off the event loop.
 `ARCHIVE_UPLOAD_DIR` selects the archive directory, and `ARCHIVE_WORKERS`
 controls the number of archive I/O workers.
 
+Archive storage uses ordered `ArchiveStorageStrategy` implementations. The
+default strategy stores each file as a single-entry `.zip`; existing archives
+remain readable. Additional strategies can select inputs and provide their own
+unique filename extension, encoding, content comparison, and decoding. Keep the
+ZIP strategy registered when adding formats so previously stored files remain
+accessible. The current HTTP upload and download APIs still represent individual
+files; directory ingestion and browsing require separate API support.
+
 Uploads require `file` and JSON `metadata` multipart parts. The HTTP server
 requires authentication and CSRF protection; restart it after configuration
-changes. The former SOAP starter was removed because it selected Spring MVC;
+changes. Multipart file parts are limited to 100 MiB by default; set
+`FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART` (for example, `1GB`) to change
+the limit. Compose and Gradle `:FileServer:bootRun` also read it from
+`FileServer/.env`; set it in the run configuration for direct IDE runs. The
+disk limit must be at least the multipart in-memory threshold (256 KiB by
+default). Multipart requests exceeding a size limit receive HTTP 413.
+The former SOAP starter was removed because it selected Spring MVC;
 there are currently no SOAP endpoints in FileServer.
 
 ## Resumable transfers
+
+See [TRANSFER-API.md](TRANSFER-API.md) for the complete protocol and a Node.js
+upload and resume example.
 
 For uploads that may be interrupted, create a session with
 `POST /files/transfers` and JSON containing `filename`, `size`, `sha256`
@@ -74,6 +91,16 @@ response includes a stable `transferId`, `offset`, `length`, and `expiresAt`.
 Persist the transfer ID on the client and query `GET` or `HEAD
 /files/transfers/{transferId}` after reconnecting to recover the current
 `Upload-Offset`.
+
+To upload a local file, run `.\scripts\create-transfer.ps1 <file>` in
+PowerShell (or `powershell -File scripts\create-transfer.ps1 <file>` in cmd).
+It creates a session, prints its transfer ID, uploads chunks, and completes
+the transfer. To resume an interrupted upload, run the same command with
+`-TransferId <id>`; use the same local file, whose checksum is verified when
+the transfer completes. The script uses `scripts\fileserver.netrc` for HTTP
+credentials. The Bash script `bash scripts/create-transfer.sh <file>` requires
+Python 3.8 or later and currently only creates a session; send its chunks and
+complete it separately.
 
 Send chunks as `PATCH /files/transfers/{transferId}` with
 `Content-Type: application/octet-stream` and a `Content-Range` header such as

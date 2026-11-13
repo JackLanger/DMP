@@ -17,8 +17,8 @@ public interface Archive extends AutoCloseable {
 	Mono<String> store(FilePart file);
 
 	/**
-	 * Stores a completed transfer under its stable key. Repeating the operation replaces
-	 * the same archive atomically instead of creating a duplicate document blob.
+	 * Stores a completed transfer under its stable key. Repeating the operation with
+	 * matching content returns the same key; conflicting content is rejected.
 	 */
 	Mono<String> store(Path source, String filename, String storageKey);
 

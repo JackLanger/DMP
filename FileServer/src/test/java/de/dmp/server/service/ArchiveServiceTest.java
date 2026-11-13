@@ -4,6 +4,8 @@ import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.service.archive.ArchiveService;
 import de.dmp.server.service.archive.ArchivedFile;
 import de.dmp.server.service.archive.ArchiveContext;
+import de.dmp.server.service.archive.ArchiveStorageStrategy;
+import de.dmp.server.service.archive.ZipArchiveStorageStrategy;
 import de.dmp.server.service.archive.ops.ArchiveOperation;
 import de.dmp.server.service.archive.ops.DeleteOperation;
 import de.dmp.server.service.archive.ops.RetrieveOperation;
@@ -19,10 +21,13 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
@@ -116,6 +121,83 @@ class ArchiveServiceTest {
 			assertArrayEquals(contents, input.readAllBytes());
 		}
 	}
+
+		@Test
+		void strategiesHandleBothUploadPathsAndExistingZipArchives() throws Exception {
+			var raw = new ArchiveStorageStrategy() {
+				@Override public String extension() { return ".raw"; }
+				@Override public boolean supports(Path source, String filename) {
+					return filename.endsWith(".raw") || Files.isDirectory(source);
+				}
+				@Override public void write(Path source, String entryName, OutputStream output) throws IOException {
+					Files.copy(Files.isDirectory(source) ? source.resolve("child") : source, output);
+				}
+				@Override public boolean matches(Path stored, Path source, String entryName) throws IOException {
+					return Files.mismatch(stored, Files.isDirectory(source) ? source.resolve("child") : source) == -1;
+				}
+				@Override public Optional<ArchivedFile> read(Path stored) throws IOException {
+					return Optional.of(new ArchivedFile(new org.springframework.core.io.FileSystemResource(stored), Files.size(stored)));
+				}
+			};
+			try (var service = new ArchiveService(uploadDir, 1, List.of(raw, new ZipArchiveStorageStrategy()))) {
+				byte[] contents = "raw data".getBytes();
+				FilePart file = filePart(contents);
+				when(file.filename()).thenReturn("file.raw");
+				String multipartKey = service.store(file).block(Duration.ofSeconds(5));
+				assertTrue(Files.exists(uploadDir.resolve(multipartKey + ".raw")));
+				MetadataDto multipart = new MetadataDto("file.raw", "", multipartKey, Set.of());
+				try (var input = service.retrieve(multipart).block(Duration.ofSeconds(5)).content().getInputStream()) {
+					assertArrayEquals(contents, input.readAllBytes());
+				}
+
+				Path source = uploadDir.resolve("source");
+				Files.write(source, contents);
+				assertEquals("transfer", service.store(source, "file.raw", "transfer").block(Duration.ofSeconds(5)));
+				assertEquals("transfer", service.store(source, "file.raw", "transfer").block(Duration.ofSeconds(5)));
+				Files.writeString(source, "different");
+				assertThrows(RuntimeException.class, () -> service.store(source, "file.raw", "transfer").block(Duration.ofSeconds(5)));
+
+				Path directory = Files.createDirectory(uploadDir.resolve("directory"));
+				Files.write(directory.resolve("child"), contents);
+				assertEquals("directory-key", service.store(directory, "directory", "directory-key").block(Duration.ofSeconds(5)));
+				MetadataDto directoryMetadata = new MetadataDto("directory", "", "directory-key", Set.of());
+				try (var input = service.retrieve(directoryMetadata).block(Duration.ofSeconds(5)).content().getInputStream()) {
+					assertArrayEquals(contents, input.readAllBytes());
+				}
+
+				try (var zip = new ZipOutputStream(Files.newOutputStream(uploadDir.resolve("legacy.zip")))) {
+					zip.putNextEntry(new ZipEntry("old.txt"));
+					zip.write(contents);
+					zip.closeEntry();
+				}
+				MetadataDto legacy = new MetadataDto("old.txt", "", "legacy", Set.of());
+				try (var input = service.retrieve(legacy).block(Duration.ofSeconds(5)).content().getInputStream()) {
+					assertArrayEquals(contents, input.readAllBytes());
+				}
+				service.delete(multipartKey).block(Duration.ofSeconds(5));
+				assertFalse(Files.exists(uploadDir.resolve(multipartKey + ".raw")));
+				service.delete("legacy").block(Duration.ofSeconds(5));
+				assertFalse(Files.exists(uploadDir.resolve("legacy.zip")));
+			}
+		}
+
+		@Test
+		void rejectsAmbiguousAndDuplicateStorageFormats() throws Exception {
+			assertThrows(IllegalArgumentException.class, () -> new ArchiveContext(uploadDir,
+					List.of(new ZipArchiveStorageStrategy(), new ZipArchiveStorageStrategy())));
+			var first = new ZipArchiveStorageStrategy();
+			ArchiveStorageStrategy second = new ArchiveStorageStrategy() {
+				@Override public String extension() { return ".other"; }
+				@Override public boolean supports(Path source, String filename) { return false; }
+				@Override public void write(Path source, String name, OutputStream output) { throw new UnsupportedOperationException(); }
+				@Override public boolean matches(Path stored, Path source, String name) { throw new UnsupportedOperationException(); }
+				@Override public Optional<ArchivedFile> read(Path stored) { throw new UnsupportedOperationException(); }
+			};
+			var context = new ArchiveContext(uploadDir, List.of(first, second));
+			Files.createFile(uploadDir.resolve("duplicate.zip"));
+			Files.createFile(uploadDir.resolve("duplicate.other"));
+			assertThrows(IOException.class, () -> context.findArchive("duplicate"));
+		}
 
 	@Test
 	void transferFailuresAreReportedAndTemporaryFilesRemoved() throws Exception {

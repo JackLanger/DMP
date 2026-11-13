@@ -13,6 +13,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 
 public class ArchiveService implements Archive {
 
@@ -26,9 +27,12 @@ public class ArchiveService implements Archive {
 	}
 
 	public ArchiveService(Path uploadDir, int workers) throws IOException {
+		this(uploadDir, workers, List.of(new ZipArchiveStorageStrategy()));
+	}
 
+	public ArchiveService(Path uploadDir, int workers, List<ArchiveStorageStrategy> strategies) throws IOException {
 		if (workers < 1) throw new IllegalArgumentException("Archive worker count must be positive");
-		this.context = ArchiveContext.create(uploadDir);
+		this.context = ArchiveContext.create(uploadDir, strategies);
 		this.scheduler = Schedulers.newBoundedElastic(workers, 100000, "archive");
 	}
 

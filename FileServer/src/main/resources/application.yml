@@ -3,6 +3,10 @@ spring:
   main:
     web-application-type: reactive
 
+  webflux:
+    multipart:
+      max-disk-usage-per-part: ${FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART:100MB}
+
   application:
     name: FileServer
 

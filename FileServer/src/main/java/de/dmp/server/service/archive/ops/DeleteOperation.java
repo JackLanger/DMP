@@ -10,7 +10,10 @@ public record DeleteOperation(String storageKey) implements ArchiveOperation<Voi
 
 	@Override
 	public Mono<Void> execute(ArchiveContext context, Scheduler scheduler) {
-		return Mono.fromCallable(() -> Files.deleteIfExists(context.archivePath(storageKey)))
+		return Mono.fromCallable(() -> {
+			var archive = context.findArchive(storageKey);
+			return archive.isPresent() && Files.deleteIfExists(archive.get().path());
+		})
 				.subscribeOn(scheduler).then();
 	}
 

@@ -114,6 +114,12 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
             environment("SPRING_SECURITY_USER_PASSWORD", password)
         }
     }
+    if (System.getenv("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART") == null) {
+        settings.getProperty("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART")?.let { limit ->
+            require(limit.isNotBlank()) { "FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART must not be empty" }
+            environment("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART", limit)
+        }
+    }
     if (System.getenv("SPRING_MONGODB_URI") == null && envFile.isFile) {
         val user = settings.getProperty("MONGO_APP_USER")
         val password = settings.getProperty("MONGO_APP_PASSWORD")
