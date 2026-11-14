@@ -1,0 +1,13 @@
+{
+  "name": "dmp-portal",
+  "private": true,
+  "workspaces": [
+    "dmp.frontend",
+    "dmp.server",
+    "dmp.xclient"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @dmp/server && npm run build --workspace @dmp/xclient",
+    "test": "npm run test --workspace @dmp/frontend"
+  }
+}

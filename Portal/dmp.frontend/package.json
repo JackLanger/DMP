@@ -1,0 +1,30 @@
+{
+  "name": "@dmp/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/ServerView.tsx",
+    "./desktop": "./src/DesktopView.tsx",
+    "./rust": "./src/rust.ts",
+    "./server.css": "./src/styles/server.css",
+    "./desktop.css": "./src/styles/desktop.css"
+  },
+  "scripts": {
+    "build:wasm": "wasm-pack build rust --target web --dev --out-dir pkg -- --locked",
+    "pretest": "npm run build:wasm",
+    "test": "node --test test/*.test.mjs"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "jsdom": "^26.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "vite": "^8.3.8",
+    "wasm-pack": "0.15.1"
+  }
+}

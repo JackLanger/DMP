@@ -1,15 +1,18 @@
 {
-  "name": "dmpxclient",
+  "name": "@dmp/xclient",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run build:wasm --workspace @dmp/frontend",
     "dev": "vite",
+    "prebuild": "npm run build:wasm --workspace @dmp/frontend",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@dmp/frontend": "0.1.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "react": "^19.1.0",

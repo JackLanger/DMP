@@ -1,0 +1,24 @@
+{
+  "name": "DMP xclient (Tauri 2)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/dmp,type=bind",
+  "workspaceFolder": "/workspaces/dmp/Portal/dmp.xclient",
+  "mounts": [
+    "source=dmp-portal-node-modules,target=/workspaces/dmp/Portal/node_modules,type=volume",
+    "source=dmp-frontend-node-modules,target=/workspaces/dmp/Portal/dmp.frontend/node_modules,type=volume",
+    "source=dmp-server-node-modules,target=/workspaces/dmp/Portal/dmp.server/node_modules,type=volume",
+    "source=dmp-xclient-node-modules,target=/workspaces/dmp/Portal/dmp.xclient/node_modules,type=volume"
+  ],
+  "remoteUser": "node",
+  "postCreateCommand": "sudo chown node:node ../node_modules ../dmp.frontend/node_modules ../dmp.server/node_modules node_modules && npm ci --prefix ..",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tauri-apps.tauri-vscode"
+      ]
+    }
+  }
+}
