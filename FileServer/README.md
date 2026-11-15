@@ -79,6 +79,13 @@ default). Multipart requests exceeding a size limit receive HTTP 413.
 The former SOAP starter was removed because it selected Spring MVC;
 there are currently no SOAP endpoints in FileServer.
 
+The DMP desktop client connects to the FileServer API from its Tauri webview.
+CORS is enabled for the local Vite origin and Tauri desktop origins by default.
+For another frontend origin, set `FILESERVER_CORS_ALLOWED_ORIGINS` to a
+comma-separated list of exact origins (for example,
+`https://portal.example.com`). Keep this list limited to trusted frontends; the
+client uses HTTP Basic authentication and a CSRF token for uploads.
+
 ## Resumable transfers
 
 See [TRANSFER-API.md](../docs/FileServer/TRANSFER-API.md) for the complete protocol and a Node.js

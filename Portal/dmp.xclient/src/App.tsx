@@ -1,9 +1,7 @@
-import { DesktopView } from "@dmp/frontend/desktop";
-import { greet } from "@dmp/frontend/rust";
-import "@dmp/frontend/desktop.css";
+import { FileServerView } from "./FileServerView";
 
 function App() {
-  return <DesktopView greet={greet} />;
+  return <FileServerView />;
 }
 
 export default App;
