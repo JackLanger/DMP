@@ -19,7 +19,9 @@ Put reusable React components, views, and platform-independent TypeScript in
 `@dmp/frontend` in either application. The workspace links the source directly,
 so changes are available to both Vite development servers without a separate
 library build. Keep Tauri-specific code in the desktop application and pass
-platform-specific behavior to shared components as props.
+platform-specific behavior to shared components as props. See
+[UI extensibility guide](UI-EXTENSIBILITY.md) for where to add components,
+how to compose them into each app, and how to expose shared package imports.
 
 Shared Rust code lives in `dmp.frontend/rust`. Export browser-compatible
 functions with `wasm-bindgen` and expose them through
