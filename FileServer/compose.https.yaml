@@ -1,0 +1,23 @@
+services:
+  fileserver:
+    ports: !reset []
+    environment:
+      - 'SERVER_FORWARD_HEADERS_STRATEGY=framework'
+
+  caddy:
+    image: caddy:2
+    environment:
+      - 'FILESERVER_HTTPS_HOST=${FILESERVER_HTTPS_HOST:?Set FILESERVER_HTTPS_HOST to the Pi IP address or local hostname in FileServer/.env}'
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - fileserver
+
+volumes:
+  caddy_data:
+  caddy_config:

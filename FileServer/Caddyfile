@@ -1,0 +1,4 @@
+https://{$FILESERVER_HTTPS_HOST} {
+	tls internal
+	reverse_proxy fileserver:8080
+}

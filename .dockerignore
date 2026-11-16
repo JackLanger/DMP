@@ -1,0 +1,8 @@
+*
+!FileServer/
+FileServer/*
+!FileServer/build/
+FileServer/build/*
+!FileServer/build/libs/
+FileServer/build/libs/*
+!FileServer/build/libs/FileServer-*.jar
