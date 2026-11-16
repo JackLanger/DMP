@@ -1,18 +1,4 @@
 services:
-  mongodb:
-    image: 'mongo:latest'
-    environment:
-      - 'MONGO_INITDB_DATABASE=${MONGO_DATABASE:?Set MONGO_DATABASE in FileServer/.env}'
-      - 'MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?Set MONGO_PASSWORD in FileServer/.env}'
-      - 'MONGO_INITDB_ROOT_USERNAME=${MONGO_USER:?Set MONGO_USER in FileServer/.env}'
-      - 'MONGO_DATABASE=${MONGO_DATABASE:?Set MONGO_DATABASE in FileServer/.env}'
-      - 'MONGO_APP_USER=${MONGO_APP_USER:?Set MONGO_APP_USER in FileServer/.env}'
-      - 'MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD in FileServer/.env}'
-    volumes:
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro,z
-    ports:
-      - "27017:27017"
-
   fileserver:
     image: 'fileserver:latest'
     build:
@@ -21,12 +7,9 @@ services:
       args:
         VERSION: ${VERSION}
     environment:
-      - 'SPRING_MONGODB_URI=mongodb://${MONGO_APP_USER}:${MONGO_APP_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=${MONGO_DATABASE}'
       - 'SPRING_SECURITY_USER_PASSWORD=${FILESERVER_PASSWORD:?Set FILESERVER_PASSWORD in FileServer/.env}'
       - 'FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART=${FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART:-100MB}'
     ports:
       - "8080:8080"
-    depends_on:
-      - mongodb
     volumes:
-      - ./FileServer/data:/app/data
+      - "${FILE_SERVER_DATA:-./FileServer/data}:/app/data"

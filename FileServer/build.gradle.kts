@@ -35,7 +35,7 @@ extra["springCloudVersion"] = "2026.0.0-SNAPSHOT"
 
 dependencies {
     implementation(libs.bundles.spring.core)
-    implementation(libs.bundles.spring.mongo)
+    implementation(libs.sqlite.jdbc)
     implementation(libs.bundles.spring.other)
 
     implementation(libs.yaml)
@@ -45,19 +45,16 @@ dependencies {
     compileOnly(libs.lombok)
 
     developmentOnly(libs.spring.boot.devtools)
-    developmentOnly(libs.spring.boot.docker.compose)
 
     annotationProcessor(libs.lombok)
     annotationProcessor(libs.spring.boot.configuration.processor)
 
     testImplementation(libs.bundles.spring.core.test)
-    testImplementation(libs.bundles.spring.mongo.test)
     testImplementation(libs.bundles.spring.other.test)
 
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.testcontainers.junit.jupiter)
-    testImplementation(libs.testcontainers.mongodb)
 
     testCompileOnly(libs.lombok)
     testRuntimeOnly(libs.junit.platform.launcher)
@@ -118,22 +115,6 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
         settings.getProperty("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART")?.let { limit ->
             require(limit.isNotBlank()) { "FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART must not be empty" }
             environment("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART", limit)
-        }
-    }
-    if (System.getenv("SPRING_MONGODB_URI") == null && envFile.isFile) {
-        val user = settings.getProperty("MONGO_APP_USER")
-        val password = settings.getProperty("MONGO_APP_PASSWORD")
-        if (user != null || password != null) {
-            val database = settings.getProperty("MONGO_DATABASE")
-            require(!database.isNullOrEmpty() && !user.isNullOrEmpty() && !password.isNullOrEmpty()) {
-                "Set MONGO_DATABASE, MONGO_APP_USER and MONGO_APP_PASSWORD in FileServer/.env"
-            }
-            require(database.matches(Regex("[A-Za-z0-9_-]+")) &&
-                user.matches(Regex("[A-Za-z0-9._~-]+")) &&
-                password.matches(Regex("[A-Za-z0-9._~-]+"))) {
-                "MongoDB application credentials or database name contain unsupported characters"
-            }
-            environment("SPRING_MONGODB_URI", "mongodb://$user:$password@localhost:27017/$database?authSource=$database")
         }
     }
     systemProperty("spring.profiles.active", "dev")

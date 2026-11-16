@@ -15,11 +15,6 @@ spring:
   application:
     name: FileServer
 
-  mongodb:
-    uri: ${SPRING_MONGODB_URI:mongodb://localhost:27017/dmp}
-    representation:
-      uuid: standard
-
   security:
     user:
       name: dev
@@ -31,3 +26,6 @@ archive:
   transfers:
     expiry: ${ARCHIVE_TRANSFER_EXPIRY:PT24H}
     cleanup-interval: ${ARCHIVE_TRANSFER_CLEANUP_INTERVAL:3600000}
+
+metadata:
+  database: ${FILESERVER_DATABASE_PATH:data/metadata.db}

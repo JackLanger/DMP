@@ -1,62 +1,83 @@
-# FileServer MongoDB setup
+# FileServer setup
 
 Copy `.env.example` to `.env` in this directory (or add the missing variables to
-your existing `.env`). Set distinct, strong values for `MONGO_PASSWORD` and
-`MONGO_APP_PASSWORD`; keep this file private. The application username and
-password must use only URI-unreserved characters: letters, digits, `.`, `_`,
-`~`, and `-`. The database name may contain only letters, digits, `_`, and
-`-`. For example, generate a password with `openssl rand -hex 32`. Set
-`VERSION` to the version in `VERSION`.
-
-Set `FILESERVER_PASSWORD` to a separate strong password for the FileServer HTTP
-user `dev`. Compose and Gradle `:FileServer:bootRun` pass it to Spring Security;
-an explicitly set `SPRING_SECURITY_USER_PASSWORD` takes precedence for
-Gradle. For a direct Spring Boot run in the IDE, set
-`SPRING_SECURITY_USER_PASSWORD` in the run configuration. If no password is
-configured for a local run, Spring Security generates one at startup.
-
-Run `docker compose up -d mongodb` from this directory. On a fresh MongoDB data
-directory, `mongo-init.js` creates the application user in `MONGO_DATABASE`
-with `readWrite` access to that database only. The root user is for
-administration; FileServer connects as the application user.
-
-MongoDB runs initialization scripts only for a fresh data directory. To add
-the application user to an **existing** MongoDB container, first update `.env`
-and then run the following from this directory:
-
-```sh
-docker cp mongo-init.js "$(docker compose ps -q mongodb):/tmp/dmp-mongo-init.js"
-docker exec --env-file .env "$(docker compose ps -q mongodb)" sh -c \
-  'mongosh --authenticationDatabase admin --username "$MONGO_USER" --password "$MONGO_PASSWORD" /tmp/dmp-mongo-init.js'
-```
-
-The root credentials must match those used to initialize the existing data.
-The script refuses to overwrite an existing application user; manage that user
-separately if its credentials or roles need changing. Do not remove the
-existing MongoDB volume to rerun initialization: that would discard its data.
+your existing `.env`). Set `VERSION` to the version in `VERSION` and set
+`FILESERVER_PASSWORD` to a strong password for the FileServer HTTP user `dev`.
+Keep `.env` private. Compose and Gradle `:FileServer:bootRun` pass the password
+to Spring Security; an explicitly set `SPRING_SECURITY_USER_PASSWORD` takes
+precedence for Gradle. For a direct IDE run, set
+`SPRING_SECURITY_USER_PASSWORD` in the run configuration. Never use the default
+local password in production.
 
 Build the application JAR before running `docker compose up -d --build
-fileserver`. Gradle `:FileServer:bootRun` reads the application credentials
-from `.env` and connects to `localhost`. An explicitly set
-`SPRING_MONGODB_URI` takes precedence. For a direct Spring Boot run in the IDE,
-set `SPRING_MONGODB_URI` in its run configuration, using the same application
-credentials and database:
+fileserver` from this directory.
 
-```text
-mongodb://APP_USER:APP_PASSWORD@localhost:27017/dmp?authSource=dmp
+Metadata is stored in SQLite at `data/metadata.db` relative to the application
+working directory. For a direct run, set the `FILESERVER_DATABASE_PATH`
+environment variable to use another file; the parent directory is created
+automatically. In Compose, the database and archives both live inside
+`/app/data`, backed by `FILE_SERVER_DATA` on the host. Use a persistent local
+filesystem with permissions for the container, and back up the database together
+with the archives while FileServer is stopped so they remain consistent.
+
+The SQLite database starts empty; existing MongoDB metadata is not imported.
+Existing archive files are not deleted, but they will not be accessible
+through the API without their metadata. Preserve any old MongoDB volumes and
+archives if that data may be needed. An old MongoDB container may remain as a
+Compose orphan; stop it separately after confirming it is no longer needed.
+
+## HTTPS on a local network
+
+The optional HTTPS override uses Caddy as a reverse proxy with its own local
+certificate authority (CA). It leaves the default development Compose setup
+unchanged. Use a stable IP address for the Raspberry Pi, such as a DHCP
+reservation, and set `FILESERVER_HTTPS_HOST` in `FileServer/.env` to that IP
+address or a local hostname resolving to it. Do not include a scheme or port.
+If you use a hostname, configure DNS or hosts files on each client.
+
+Set `FILE_SERVER_DATA` to an appropriate persistent host directory for the
+database and archives; if unset, it defaults to `./FileServer/data` relative to
+this directory.
+
+Build the application JAR first, then run from the `FileServer` directory:
+
+```sh
+docker compose -f compose.yaml -f compose.https.yaml up -d --build
 ```
 
-For containers, Compose supplies the URI with `mongodb` as the host. Without
-`SPRING_MONGODB_URI` or Gradle's `.env` configuration, the local application
-defaults to an unauthenticated `mongodb://localhost:27017/dmp`, suitable only
-for a MongoDB instance that does not require authentication. MongoDB databases
-normally appear after their first write.
+This override requires Docker Compose 2.24.4 or newer for `!reset`. It removes
+the host port mapping for FileServer and exposes Caddy on ports
+80 and 443 instead. Use `https://<FILESERVER_HTTPS_HOST>` from clients; port
+80 redirects to HTTPS. Ensure those ports are available and restrict network
+access with the host firewall as appropriate.
+
+Caddy stores its CA and certificates in the `caddy_data` Docker volume. After
+startup, export its **public root certificate** on the Pi:
+
+```sh
+docker compose -f compose.yaml -f compose.https.yaml exec -T caddy \
+  cat /data/caddy/pki/authorities/local/root.crt > fileserver-local-root.crt
+```
+
+Transfer this certificate to each client over a trusted channel, verify its
+fingerprint, and install it in the trust store used by that client or browser.
+For a one-off check without installing it, use
+`curl --cacert fileserver-local-root.crt https://<FILESERVER_HTTPS_HOST>/`.
+An HTTP authentication response also confirms the TLS connection succeeded.
+Do not distribute the CA private key. Protect and back up the Caddy data
+volume: deleting or replacing it changes the CA and requires clients to trust
+the new root. Never remove the volumes when stopping the deployment.
+
+If you change from an IP address to a hostname, update
+`FILESERVER_HTTPS_HOST`, recreate the stack with the same command, and use
+the new hostname in the client. The hostname must resolve on the client; the
+existing CA remains trusted as long as its data volume is retained.
 
 ## Uploads
 
-The HTTP server uses WebFlux and the reactive MongoDB driver for file metadata
-reads and uploads. Multipart transfers and downloads are streamed reactively;
-blocking ZIP and filesystem operations run off the event loop.
+The HTTP server uses WebFlux. SQLite metadata operations and blocking ZIP and
+filesystem operations run off the event loop; multipart transfers and
+downloads are streamed reactively.
 `ARCHIVE_UPLOAD_DIR` selects the archive directory, and `ARCHIVE_WORKERS`
 controls the number of archive I/O workers.
 

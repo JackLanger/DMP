@@ -14,11 +14,7 @@ import java.time.Duration;
 		properties = {
 				"spring.config.location=file:src/main/resources/application.yml",
 				"FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART=1MB",
-				"spring.autoconfigure.exclude=org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration,"
-						+ "org.springframework.boot.mongodb.autoconfigure.MongoReactiveAutoConfiguration,"
-						+ "org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration,"
-						+ "org.springframework.boot.data.mongodb.autoconfigure.DataMongoReactiveAutoConfiguration,"
-						+ "org.springframework.boot.security.autoconfigure.web.reactive.ReactiveWebSecurityAutoConfiguration,"
+				"spring.autoconfigure.exclude=org.springframework.boot.security.autoconfigure.web.reactive.ReactiveWebSecurityAutoConfiguration,"
 						+ "org.springframework.boot.security.autoconfigure.actuate.web.reactive.ReactiveManagementWebSecurityAutoConfiguration"
 		})
 class MultipartUploadOverrideTest {

@@ -9,6 +9,7 @@ spring-dependency-management = "1.1.7"
 ulid-creator = "5.2.4"
 gzip = "12.1.14"
 yaml = "3.1.8"
+sqlite = "3.49.1.0"
 
 [plugins]
 asciidoctor = { id = "org.asciidoctor.jvm.convert", version.ref = "asciidoctor" }
@@ -40,9 +41,6 @@ spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-
 spring-boot-starter-actuator-test = { module = "org.springframework.boot:spring-boot-starter-actuator-test" }
 spring-boot-starter-cache = { module = "org.springframework.boot:spring-boot-starter-cache" }
 spring-boot-starter-cache-test = { module = "org.springframework.boot:spring-boot-starter-cache-test" }
-spring-boot-starter-data-mongodb = { module = "org.springframework.boot:spring-boot-starter-data-mongodb" }
-spring-boot-starter-data-mongodb-reactive = { module = "org.springframework.boot:spring-boot-starter-data-mongodb-reactive" }
-spring-boot-starter-data-mongodb-test = { module = "org.springframework.boot:spring-boot-starter-data-mongodb-test" }
 spring-boot-starter-grpc-server = { module = "org.springframework.boot:spring-boot-starter-grpc-server" }
 spring-boot-starter-grpc-server-test = { module = "org.springframework.boot:spring-boot-starter-grpc-server-test" }
 # spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
@@ -58,9 +56,8 @@ spring-boot-starter-webservices = { module = "org.springframework.boot:spring-bo
 spring-boot-starter-webservices-test = { module = "org.springframework.boot:spring-boot-starter-webservices-test" }
 # spring-cloud-starter-task = { module = "org.springframework.cloud:spring-cloud-starter-task" }
 spring-restdocs-webtestclient = { module = "org.springframework.restdocs:spring-restdocs-webtestclient" }
-# sqlite-jdbc = { module = "org.xerial:sqlite-jdbc" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
-testcontainers-mongodb = { module = "org.testcontainers:testcontainers-mongodb" }
 ulid-creator = { module = "com.github.f4b6a3:ulid-creator", version.ref = "ulid-creator" }
 
 
@@ -84,11 +81,6 @@ spring-core = [
     "jackson-module-kotlin"
 ]
 
-spring-mongo = [
-    "spring-boot-starter-data-mongodb",
-    "spring-boot-starter-data-mongodb-reactive"
-]
-
 spring-other = [
     "spring-boot-starter-grpc-server"
 ]
@@ -98,10 +90,6 @@ spring-core-test = [
     "spring-boot-starter-cache-test",
     "spring-boot-starter-security-test",
     "spring-boot-starter-webflux-test"
-]
-
-spring-mongo-test = [
-    "spring-boot-starter-data-mongodb-test"
 ]
 
 spring-other-test = [
