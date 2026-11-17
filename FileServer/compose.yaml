@@ -1,6 +1,6 @@
 services:
   fileserver:
-    image: 'fileserver:latest'
+    image: 'ghcr.io/jacklanger/dmp/fileserver:${FILESERVER_IMAGE_TAG:-latest}'
     build:
       context: ..
       dockerfile: FileServer/FileServer.Containerfile

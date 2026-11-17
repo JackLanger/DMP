@@ -1,6 +1,6 @@
 services:
   fileserver:
-    ports: !reset []
+    ports: !reset [ ]
     environment:
       - 'SERVER_FORWARD_HEADERS_STRATEGY=framework'
 
@@ -11,8 +11,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -21,3 +23,15 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+configs:
+  caddyfile:
+    content: |
+      {
+        default_sni {$$FILESERVER_HTTPS_HOST}
+      }
+
+      https://{$$FILESERVER_HTTPS_HOST} {
+        tls internal
+        reverse_proxy fileserver:8080
+      }

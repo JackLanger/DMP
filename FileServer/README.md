@@ -21,19 +21,19 @@ server. Package visibility is managed in GitHub Packages. If the package is
 private, authenticate Docker to `ghcr.io` with a GitHub token that can read
 the package before pulling.
 
-To deploy the published image using the existing Compose configuration, run
-from this directory on the target host:
+To deploy the published image using the Compose configuration, copy
+`compose.yaml` to the target host, create its `.env` file, then run from the
+directory containing `compose.yaml`:
 
 ```sh
-docker pull ghcr.io/jacklanger/dmp/fileserver:latest
-docker tag ghcr.io/jacklanger/dmp/fileserver:latest fileserver:latest
 docker compose up -d --no-build fileserver
 ```
 
-For the HTTPS setup, use `docker compose -f compose.yaml -f compose.https.yaml
-up -d --no-build` instead. To deploy a particular commit, pull its full
-commit-SHA tag and tag that image as `fileserver:latest`. These commands retain
-the existing data and Caddy volumes.
+Compose pulls `ghcr.io/jacklanger/dmp/fileserver:latest` if it is not already
+available locally. If the package is private, authenticate Docker to `ghcr.io`
+with a GitHub token that can read the package. To deploy a particular commit,
+set `FILESERVER_IMAGE_TAG` in `.env` to its full commit SHA. These commands
+retain the existing data and Caddy volumes.
 
 Metadata is stored in SQLite at `data/metadata.db` relative to the application
 working directory. For a direct run, set the `FILESERVER_DATABASE_PATH`
@@ -62,17 +62,20 @@ Set `FILE_SERVER_DATA` to an appropriate persistent host directory for the
 database and archives; if unset, it defaults to `./FileServer/data` relative to
 this directory.
 
-Build the application JAR first, then run from the `FileServer` directory:
+Copy both `compose.yaml` and `compose.https.yaml` to the target host and create
+the `.env` file there. No application source files or separate Caddyfile are
+needed. Run from the directory containing both Compose files:
 
 ```sh
-docker compose -f compose.yaml -f compose.https.yaml up -d --build
+docker compose -f compose.yaml -f compose.https.yaml up -d --no-build
 ```
 
-This override requires Docker Compose 2.24.4 or newer for `!reset`. It removes
-the host port mapping for FileServer and exposes Caddy on ports
-80 and 443 instead. Use `https://<FILESERVER_HTTPS_HOST>` from clients; port
-80 redirects to HTTPS. Ensure those ports are available and restrict network
-access with the host firewall as appropriate.
+Compose pulls the FileServer and Caddy images as needed. This override requires
+Docker Compose 2.24.4 or newer for `!reset` and inline configs. It removes the
+host port mapping for FileServer and exposes Caddy on ports 80 and 443 instead.
+Use `https://<FILESERVER_HTTPS_HOST>` from clients; port 80 redirects to HTTPS.
+Ensure those ports are available and restrict network access with the host
+firewall as appropriate.
 
 Caddy stores its CA and certificates in the `caddy_data` Docker volume. After
 startup, export its **public root certificate** on the Pi:
@@ -84,6 +87,35 @@ docker compose -f compose.yaml -f compose.https.yaml exec -T caddy \
 
 Transfer this certificate to each client over a trusted channel, verify its
 fingerprint, and install it in the trust store used by that client or browser.
+To obtain the SHA-256 fingerprint on the Pi, run:
+
+```sh
+openssl x509 -in fileserver-local-root.crt -noout -fingerprint -sha256
+```
+
+Communicate that fingerprint to each client separately over a trusted channel.
+Copy `scripts/install-fileserver-ca.sh` to Linux or macOS clients, or
+`scripts/install-fileserver-ca.ps1` to Windows clients, along with the public
+certificate. From the directory containing the copied files, use the fingerprint
+obtained from the Pi (not one supplied with an untrusted certificate):
+
+```sh
+# Fedora/RHEL, Debian/Ubuntu, Arch, openSUSE, or macOS
+bash install-fileserver-ca.sh fileserver-local-root.crt 'AA:BB:...'
+```
+
+```powershell
+# Windows PowerShell, for the current user
+.\install-fileserver-ca.ps1 .\fileserver-local-root.crt 'AA:BB:...'
+```
+
+Replace `AA:BB:...` with the complete SHA-256 fingerprint. The scripts reject
+fingerprint mismatches before changing trust. Linux and macOS installations
+require administrator privileges; Windows installs into the current user's root
+store. Restart the browser if needed. Some browsers may use a separate trust
+store and require importing the certificate there too. Trusting a CA allows it
+to authenticate other sites as well, so only install a CA you control.
+
 For a one-off check without installing it, use
 `curl --cacert fileserver-local-root.crt https://<FILESERVER_HTTPS_HOST>/`.
 An HTTP authentication response also confirms the TLS connection succeeded.
