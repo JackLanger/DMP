@@ -12,6 +12,29 @@ local password in production.
 Build the application JAR before running `docker compose up -d --build
 fileserver` from this directory.
 
+## Published container
+
+Pushes to `main` build and test FileServer, then publish AMD64 and ARM64 images
+to `ghcr.io/jacklanger/dmp/fileserver` with `latest` and commit-SHA tags. The
+workflow publishes the image only; it does not automatically update a running
+server. Package visibility is managed in GitHub Packages. If the package is
+private, authenticate Docker to `ghcr.io` with a GitHub token that can read
+the package before pulling.
+
+To deploy the published image using the existing Compose configuration, run
+from this directory on the target host:
+
+```sh
+docker pull ghcr.io/jacklanger/dmp/fileserver:latest
+docker tag ghcr.io/jacklanger/dmp/fileserver:latest fileserver:latest
+docker compose up -d --no-build fileserver
+```
+
+For the HTTPS setup, use `docker compose -f compose.yaml -f compose.https.yaml
+up -d --no-build` instead. To deploy a particular commit, pull its full
+commit-SHA tag and tag that image as `fileserver:latest`. These commands retain
+the existing data and Caddy volumes.
+
 Metadata is stored in SQLite at `data/metadata.db` relative to the application
 working directory. For a direct run, set the `FILESERVER_DATABASE_PATH`
 environment variable to use another file; the parent directory is created
@@ -106,6 +129,12 @@ For another frontend origin, set `FILESERVER_CORS_ALLOWED_ORIGINS` to a
 comma-separated list of exact origins (for example,
 `https://portal.example.com`). Keep this list limited to trusted frontends; the
 client uses HTTP Basic authentication and a CSRF token for uploads.
+
+The server sends `Referrer-Policy: strict-origin-when-cross-origin` so browser
+form logins include their same-origin `Origin` header. This policy allows full
+referrer URLs on same-origin requests and only the origin on cross-origin
+requests; HTTPS-to-HTTP requests omit the referrer. Reverse proxies must not
+override it with `no-referrer`, which can cause login to be rejected by CORS.
 
 ## Resumable transfers
 
