@@ -14,7 +14,7 @@
     "build:desktop": "npm run build && electron-builder"
   },
   "build": {
-    "appId": "com.portal.desktop",
+    "appId": "de.dmp.portal.desktop",
     "productName": "Portal",
     "files": [
       "dist/**/*",
