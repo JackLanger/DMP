@@ -1,4 +1,11 @@
-    Checking xclient v0.1.0 (/home/jack/projects/DMP/Portal/xclient)
-error: could not compile `xclient` (lib) due to 3 previous errors; 1 warning emitted
-warning: build failed, waiting for other jobs to finish...
-error: could not compile `xclient` (lib test) due to 3 previous errors
+    Checking portallib v0.1.0 (/home/jack/projects/DMP/portal/shared)
+warning: unused dependency `reqwest`
+ --> Cargo.toml:7:1
+  |
+7 | reqwest = "0.13.5"
+  | ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `cargo::unused_dependencies` is set to `warn` by default
+help: consider removing the dependency on `reqwest`
+warning: `portallib` (manifest) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s

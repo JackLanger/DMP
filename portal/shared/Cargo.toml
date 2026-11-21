@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+reqwest = "0.13.5"
+tokio = "1.54.1"
 
 [target.wasm32-unknown-unknown.dependencies]
 wasm-bindgen = "0.2.130"
