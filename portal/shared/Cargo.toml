@@ -1,0 +1,9 @@
+[package]
+name = "portallib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[target.wasm32-unknown-unknown.dependencies]
+wasm-bindgen = "0.2.130"
