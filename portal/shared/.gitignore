@@ -1,2 +1,8 @@
 target
 .configuration
+
+# Lockfiles are not needed for a library crate.
+Cargo.lock
+
+# Rust backup files created by rustfmt.
+*.rs.bk
