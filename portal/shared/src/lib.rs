@@ -1,7 +1,13 @@
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 pub mod config {
+    #[cfg(target_arch = "wasm32")]
+    use serde::Serialize;
     use std::fs::File;
     use std::io::Read;
 
+    #[cfg_attr(target_arch = "wasm32", derive(Serialize))]
     pub struct AppConfig {
         fileserver_url: String,
         fileserver_user: String,
@@ -98,8 +104,16 @@ pub mod config {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn default_config() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&config::AppConfig::new())
+        .map_err(|error| JsValue::from_str(&error.to_string()))
+}
+
 // use config::AppConfig;
 // use std::path::{Path, PathBuf};
+// #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 // async fn download_file(
 //     app: AppHandle,
 //     server_url: String,
