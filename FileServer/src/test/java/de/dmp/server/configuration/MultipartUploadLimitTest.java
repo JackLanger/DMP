@@ -30,11 +30,7 @@ import java.util.Arrays;
 @SpringBootTest(
 		classes = MultipartUploadLimitTest.TestApplication.class,
 		webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-		properties = {
-				"spring.config.location=file:src/main/resources/application.yml",
-				"spring.autoconfigure.exclude=org.springframework.boot.security.autoconfigure.web.reactive.ReactiveWebSecurityAutoConfiguration,"
-						+ "org.springframework.boot.security.autoconfigure.actuate.web.reactive.ReactiveManagementWebSecurityAutoConfiguration"
-		})
+		properties = "spring.config.location=file:src/main/resources/application.yml")
 class MultipartUploadLimitTest {
 
 	private static final long LIMIT = 100L * 1024 * 1024;

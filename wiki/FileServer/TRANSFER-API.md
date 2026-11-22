@@ -7,6 +7,8 @@ session has been completed.
 
 ## Protocol
 
+Send all requests to the SecretService gateway, not directly to FileServer.
+
 All requests require `X-User` and `Authorization: Bearer <accessToken>`
 headers. Obtain a token by signing in to SecretService. All authenticated users
 can access all transfers until file-level access control is implemented.
@@ -51,9 +53,9 @@ created, so save that ID to resume if the process stops. A production
 application should persist the ID and its association with the file.
 
 Set `FILESERVER_USER` and `FILESERVER_ACCESS_TOKEN` in the process environment.
-Optionally set `FILESERVER_URL` (defaults to `http://localhost:8080`). Use
-HTTPS outside a trusted local environment; tokens and file contents are
-otherwise sent unencrypted. If a token expires, obtain a new one and resume.
+Optionally set `FILESERVER_URL` to the gateway origin (defaults to
+`https://localhost:8443`). The client must trust the gateway's TLS certificate.
+If a token expires, obtain a new one and resume.
 
 ```javascript
 import { createHash } from "node:crypto";
@@ -62,7 +64,7 @@ import { open } from "node:fs/promises";
 import { basename } from "node:path";
 
 const [filePath, resumeId] = process.argv.slice(2);
-const baseUrl = (process.env.FILESERVER_URL || "http://localhost:8080").replace(/\/+$/, "");
+const baseUrl = (process.env.FILESERVER_URL || "https://localhost:8443").replace(/\/+$/, "");
 const { FILESERVER_USER: user, FILESERVER_ACCESS_TOKEN: token } = process.env;
 if (!filePath || !user || !token) {
   throw new Error("Usage: node upload.mjs <file> [transferId]; set FILESERVER_USER and FILESERVER_ACCESS_TOKEN");

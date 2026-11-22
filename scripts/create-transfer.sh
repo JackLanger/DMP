@@ -54,4 +54,4 @@ PY
 curl -fsS -i -H "@$auth_headers" \
   -H "Content-Type: application/json" \
   --data-binary "@$request_file" \
-  "${FILESERVER_URL:-http://localhost:8080}/files/transfers"
+  "${FILESERVER_URL:-https://localhost:8443}/files/transfers"

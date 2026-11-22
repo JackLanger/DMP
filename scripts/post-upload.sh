@@ -13,4 +13,4 @@ printf 'X-User: %s\nAuthorization: Bearer %s\n' "$FILESERVER_USER" "$FILESERVER_
 curl --fail-with-body -i -H "@$auth_headers" \
   -F "file=@$1" \
   -F 'metadata={"description":"Test upload","tags":["test"]};type=application/json' \
-  "${FILESERVER_URL:-http://localhost:8080}/files"
+  "${FILESERVER_URL:-https://localhost:8443}/files"

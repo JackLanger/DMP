@@ -1,9 +1,7 @@
 package de.dmp.server;
 
 import de.dmp.server.data.dto.MetadataDto;
-import de.dmp.server.controller.FileController;
 import de.dmp.server.service.ReactiveMetadataService;
-import de.dmp.server.security.SecretServiceClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
-import java.util.List;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import reactor.core.publisher.Mono;
-import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SqliteApplicationTest {
@@ -39,19 +33,13 @@ class SqliteApplicationTest {
 	}
 
 	@Autowired ReactiveMetadataService service;
-	@Autowired FileController controller;
-	@MockitoBean SecretServiceClient secrets;
 	@LocalServerPort int port;
 
 	@Test
 	void servesStoredMetadataThroughHttp() {
 		MetadataDto dto = new MetadataDto("file.txt", "description", "key", Set.of("tag"));
 		service.create(dto).block(Duration.ofSeconds(10));
-		String token = "a".repeat(43);
-		when(secrets.validate("alice", token))
-				.thenReturn(Mono.just(new SecretServiceClient.Principal("id", "alice", List.of())));
-		WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port)
-				.defaultHeaders(headers -> { headers.setBearerAuth(token); headers.set("X-User", "alice"); }).build();
+		WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
 		client.get().uri("/files/{id}", dto.id()).exchange().expectStatus().isOk()
 				.expectBody().jsonPath("$.id").isEqualTo(dto.id().toString())
 				.jsonPath("$.name").isEqualTo("file.txt")
@@ -69,12 +57,27 @@ class SqliteApplicationTest {
 		});
 		body.part("metadata", "{\"description\":\"description\",\"tags\":[\"upload\"]}")
 				.contentType(MediaType.APPLICATION_JSON);
-		WebTestClient client = WebTestClient.bindToController(controller).build();
+		WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
 		client.post().uri("/files").contentType(MediaType.MULTIPART_FORM_DATA)
 				.body(BodyInserters.fromMultipartData(body.build())).exchange().expectStatus().isCreated();
 		MetadataDto stored = service.findByTagName("upload").blockFirst(Duration.ofSeconds(10));
 		org.junit.jupiter.api.Assertions.assertNotNull(stored);
 		client.get().uri("/files/{id}/download", stored.id()).exchange().expectStatus().isOk()
 				.expectBody(byte[].class).isEqualTo(contents);
+	}
+
+	@Test
+	void managesResumableTransfersWithoutCredentials() {
+		WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
+		String location = client.post().uri("/files/transfers")
+				.contentType(MediaType.APPLICATION_JSON)
+				.bodyValue("{\"filename\":\"test.txt\",\"size\":3,\"sha256\":\"" + "0".repeat(64) + "\"}")
+				.exchange().expectStatus().isCreated().returnResult(Void.class)
+				.getResponseHeaders().getFirst("Location");
+		org.junit.jupiter.api.Assertions.assertNotNull(location);
+		client.patch().uri(location).contentType(MediaType.APPLICATION_OCTET_STREAM)
+				.header("Content-Range", "bytes 0-2/3").bodyValue("abc".getBytes(StandardCharsets.UTF_8))
+				.exchange().expectStatus().isNoContent().expectHeader().valueEquals("Upload-Offset", "3");
+		client.delete().uri(location).exchange().expectStatus().isNoContent();
 	}
 }

@@ -13,9 +13,7 @@ import java.time.Duration;
 		webEnvironment = SpringBootTest.WebEnvironment.MOCK,
 		properties = {
 				"spring.config.location=file:src/main/resources/application.yml",
-				"FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART=1MB",
-				"spring.autoconfigure.exclude=org.springframework.boot.security.autoconfigure.web.reactive.ReactiveWebSecurityAutoConfiguration,"
-						+ "org.springframework.boot.security.autoconfigure.actuate.web.reactive.ReactiveManagementWebSecurityAutoConfiguration"
+				"FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART=1MB"
 		})
 class MultipartUploadOverrideTest {
 

@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$FilePath,
     [guid]$TransferId = [guid]::Empty,
-    [string]$ServerUrl = 'http://localhost:8080'
+    [string]$ServerUrl = 'https://localhost:8443'
 )
 
 $ErrorActionPreference = 'Stop'

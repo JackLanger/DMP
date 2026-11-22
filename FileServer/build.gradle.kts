@@ -105,14 +105,6 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     val settings = Properties().apply {
         if (envFile.isFile) envFile.inputStream().use { load(it) }
     }
-    listOf("SECRET_SERVICE_URL", "SECRET_SERVICE_CREDENTIAL", "SECRET_SERVICE_CA").forEach { key ->
-        if (System.getenv(key) == null) {
-            settings.getProperty(key)?.let { value ->
-                require(value.isNotBlank()) { "$key must not be empty" }
-                environment(key, value)
-            }
-        }
-    }
     if (System.getenv("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART") == null) {
         settings.getProperty("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART")?.let { limit ->
             require(limit.isNotBlank()) { "FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART must not be empty" }

@@ -16,7 +16,7 @@ $authHeaders = [System.IO.Path]::GetTempFileName()
 [System.IO.File]::WriteAllText($authHeaders,
     "X-User: $($env:FILESERVER_USER)`nAuthorization: Bearer $($env:FILESERVER_ACCESS_TOKEN)`n")
 $metadataFile = $null
-$serverUrl = if ($env:FILESERVER_URL) { $env:FILESERVER_URL.TrimEnd('/') } else { 'http://localhost:8080' }
+$serverUrl = if ($env:FILESERVER_URL) { $env:FILESERVER_URL.TrimEnd('/') } else { 'https://localhost:8443' }
 
 try {
     $metadataFile = [System.IO.Path]::GetTempFileName()

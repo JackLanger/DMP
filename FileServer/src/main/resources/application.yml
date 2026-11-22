@@ -2,15 +2,8 @@ dmp:
   fileserver:
     cors:
       allowed-origins: ${FILESERVER_CORS_ALLOWED_ORIGINS:http://localhost:1420,http://tauri.localhost,https://tauri.localhost,tauri://localhost}
-    secret-service:
-      url: ${SECRET_SERVICE_URL}
-      credential: ${SECRET_SERVICE_CREDENTIAL}
-      ca: ${SECRET_SERVICE_CA:}
 
 spring:
-
-  autoconfigure:
-    exclude: org.springframework.boot.security.autoconfigure.ReactiveUserDetailsServiceAutoConfiguration
 
   main:
     web-application-type: reactive
