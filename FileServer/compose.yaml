@@ -7,9 +7,33 @@ services:
       args:
         VERSION: ${VERSION}
     environment:
-      - 'SPRING_SECURITY_USER_PASSWORD=${FILESERVER_PASSWORD:?Set FILESERVER_PASSWORD in FileServer/.env}'
+      - 'SECRET_SERVICE_URL=https://secretservice:8443'
+      - 'SECRET_SERVICE_CREDENTIAL=${SECRET_SERVICE_CREDENTIAL:?Set SECRET_SERVICE_CREDENTIAL in FileServer/.env}'
+      - 'SECRET_SERVICE_CA=/run/secrets/secret-service-ca.crt'
       - 'FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART=${FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART:-100MB}'
     ports:
       - "8080:8080"
     volumes:
       - "${FILE_SERVER_DATA:-./FileServer/data}:/app/data"
+      - "${SECRET_SERVICE_CA:?Set SECRET_SERVICE_CA to the CA certificate path}:/run/secrets/secret-service-ca.crt:ro"
+    depends_on:
+      - secretservice
+
+  secretservice:
+    image: 'dmp-secretservice:local'
+    build:
+      context: ..
+      dockerfile: SecretService/Containerfile
+    environment:
+      - 'SECRET_ADMIN_SECRET=${SECRET_ADMIN_SECRET:?Set SECRET_ADMIN_SECRET in FileServer/.env}'
+      - 'SECRET_SERVICE_SECRET=${SECRET_SERVICE_CREDENTIAL:?Set SECRET_SERVICE_CREDENTIAL in FileServer/.env}'
+      - 'SECRET_TLS_CERT=/run/secrets/tls.crt'
+      - 'SECRET_TLS_KEY=/run/secrets/tls.key'
+      - 'SECRET_DATABASE_PATH=/app/data/secret.db'
+      - 'SECRET_ALLOWED_ORIGINS=${SECRET_ALLOWED_ORIGINS:-}'
+    ports:
+      - "8443:8443"
+    volumes:
+      - "${SECRET_SERVICE_DATA:?Set SECRET_SERVICE_DATA to a persistent writable directory}:/app/data"
+      - "${SECRET_TLS_CERT:?Set SECRET_TLS_CERT to the server certificate path}:/run/secrets/tls.crt:ro"
+      - "${SECRET_TLS_KEY:?Set SECRET_TLS_KEY to the server private key path}:/run/secrets/tls.key:ro"

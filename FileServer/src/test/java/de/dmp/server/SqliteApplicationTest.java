@@ -3,6 +3,7 @@ package de.dmp.server;
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.controller.FileController;
 import de.dmp.server.service.ReactiveMetadataService;
+import de.dmp.server.security.SecretServiceClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Set;
+import java.util.List;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import reactor.core.publisher.Mono;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SqliteApplicationTest {
@@ -29,22 +34,24 @@ class SqliteApplicationTest {
 	static void properties(DynamicPropertyRegistry registry) {
 		registry.add("metadata.database", () -> directory.resolve("metadata.db").toString());
 		registry.add("archive.upload", () -> directory.resolve("archive").toString());
-		registry.add("spring.security.user.name", () -> "test");
-		registry.add("spring.security.user.password", () -> "test-password");
 		registry.add("spring.grpc.server.port", () -> "0");
 		registry.add("dmp.fileserver.cors.allowed-origins", () -> "http://localhost:1420");
 	}
 
 	@Autowired ReactiveMetadataService service;
 	@Autowired FileController controller;
+	@MockitoBean SecretServiceClient secrets;
 	@LocalServerPort int port;
 
 	@Test
 	void servesStoredMetadataThroughHttp() {
 		MetadataDto dto = new MetadataDto("file.txt", "description", "key", Set.of("tag"));
 		service.create(dto).block(Duration.ofSeconds(10));
+		String token = "a".repeat(43);
+		when(secrets.validate("alice", token))
+				.thenReturn(Mono.just(new SecretServiceClient.Principal("id", "alice", List.of())));
 		WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port)
-				.defaultHeaders(headers -> headers.setBasicAuth("test", "test-password")).build();
+				.defaultHeaders(headers -> { headers.setBearerAuth(token); headers.set("X-User", "alice"); }).build();
 		client.get().uri("/files/{id}", dto.id()).exchange().expectStatus().isOk()
 				.expectBody().jsonPath("$.id").isEqualTo(dto.id().toString())
 				.jsonPath("$.name").isEqualTo("file.txt")

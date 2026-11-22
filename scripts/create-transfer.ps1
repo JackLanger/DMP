@@ -2,18 +2,28 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$FilePath,
     [guid]$TransferId = [guid]::Empty,
-    [string]$ServerUrl = 'http://localhost:8080',
-    [string]$NetrcPath = (Join-Path $PSScriptRoot 'fileserver.netrc')
+    [string]$ServerUrl = 'http://localhost:8080'
 )
 
 $ErrorActionPreference = 'Stop'
+$curl = if ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows) { 'curl.exe' } else { 'curl' }
+$nullDevice = if ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows) { 'NUL' } else { '/dev/null' }
+if (-not $env:FILESERVER_USER -or -not $env:FILESERVER_ACCESS_TOKEN) {
+    throw "Set FILESERVER_USER and FILESERVER_ACCESS_TOKEN from SecretService."
+}
+if ($env:FILESERVER_USER -cnotmatch '^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,63}$' -or
+    $env:FILESERVER_ACCESS_TOKEN -cnotmatch '^[a-zA-Z0-9_-]{43}$') {
+    throw "Invalid FILESERVER_USER or FILESERVER_ACCESS_TOKEN."
+}
 $file = Get-Item -LiteralPath $FilePath
 if ($file.PSIsContainer) {
     throw "FilePath must refer to a file."
 }
 
 $ServerUrl = $ServerUrl.TrimEnd('/')
-$cookies = [System.IO.Path]::GetTempFileName()
+$authHeaders = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($authHeaders,
+    "X-User: $($env:FILESERVER_USER)`nAuthorization: Bearer $($env:FILESERVER_ACCESS_TOKEN)`n")
 $requestFile = $null
 $chunkFile = $null
 $headerFile = $null
@@ -22,15 +32,6 @@ try {
     $stream = [System.IO.File]::Open($file.FullName, [System.IO.FileMode]::Open,
         [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
     $length = $stream.Length
-    $loginPage = curl.exe -fsS -c $cookies "$ServerUrl/login"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to fetch the login page."
-    }
-    $match = [regex]::Match(($loginPage -join "`n"), 'name="_csrf".*?value="([^"]*)"')
-    if (-not $match.Success) {
-        throw "CSRF token not found in the login page."
-    }
-    $csrf = $match.Groups[1].Value
     $requestFile = [System.IO.Path]::GetTempFileName()
     $chunkFile = [System.IO.Path]::GetTempFileName()
     $headerFile = [System.IO.Path]::GetTempFileName()
@@ -51,8 +52,8 @@ try {
             tags = @('test')
         } | ConvertTo-Json -Compress
         [System.IO.File]::WriteAllText($requestFile, $request, [System.Text.UTF8Encoding]::new($false))
-        $response = curl.exe -fsS --netrc-file $NetrcPath -b $cookies `
-            -H "X-CSRF-TOKEN: $csrf" -H "Content-Type: application/json" `
+        $response = & $curl -fsS -H "@$authHeaders" `
+            -H "Content-Type: application/json" `
             --data-binary "@$requestFile" "$ServerUrl/files/transfers"
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to create the transfer session."
@@ -64,8 +65,7 @@ try {
         }
     }
     else {
-        $response = curl.exe -fsS --netrc-file $NetrcPath -b $cookies `
-            -H "X-CSRF-TOKEN: $csrf" "$ServerUrl/files/transfers/$TransferId"
+        $response = & $curl -fsS -H "@$authHeaders" "$ServerUrl/files/transfers/$TransferId"
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to retrieve transfer $TransferId."
         }
@@ -100,8 +100,8 @@ try {
             $chunk.Dispose()
         }
         $end = $offset + $count - 1
-        curl.exe -fsS -o NUL -D $headerFile --netrc-file $NetrcPath -b $cookies `
-            -X PATCH -H "X-CSRF-TOKEN: $csrf" -H "Content-Type: application/octet-stream" `
+        & $curl -fsS -o $nullDevice -D $headerFile -H "@$authHeaders" `
+            -X PATCH -H "Content-Type: application/octet-stream" `
             -H "Content-Range: bytes $offset-$end/$length" --data-binary "@$chunkFile" `
             "$ServerUrl/files/transfers/$TransferId"
         if ($LASTEXITCODE -ne 0) {
@@ -116,8 +116,8 @@ try {
         Write-Host "Uploaded $offset of $length bytes."
     }
 
-    $completion = curl.exe -fsS --netrc-file $NetrcPath -b $cookies `
-        -X POST -H "X-CSRF-TOKEN: $csrf" "$ServerUrl/files/transfers/$TransferId/complete"
+    $completion = & $curl -fsS -H "@$authHeaders" `
+        -X POST "$ServerUrl/files/transfers/$TransferId/complete"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to complete transfer $TransferId."
     }
@@ -125,7 +125,7 @@ try {
 }
 finally {
     if ($null -ne $stream) { $stream.Dispose() }
-    Remove-Item -LiteralPath $cookies
+    Remove-Item -LiteralPath $authHeaders
     if ($null -ne $requestFile) { Remove-Item -LiteralPath $requestFile }
     if ($null -ne $chunkFile) { Remove-Item -LiteralPath $chunkFile }
     if ($null -ne $headerFile) { Remove-Item -LiteralPath $headerFile }

@@ -14,7 +14,7 @@ plugins {
 }
 
 group = "de.dmp.server"
-version = File("FileServer/VERSION").readText().trim()
+version = File("VERSION").readText().trim()
 
 java {
     toolchain {
@@ -105,10 +105,12 @@ tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     val settings = Properties().apply {
         if (envFile.isFile) envFile.inputStream().use { load(it) }
     }
-    if (System.getenv("SPRING_SECURITY_USER_PASSWORD") == null) {
-        settings.getProperty("FILESERVER_PASSWORD")?.let { password ->
-            require(password.isNotBlank()) { "FILESERVER_PASSWORD must not be empty" }
-            environment("SPRING_SECURITY_USER_PASSWORD", password)
+    listOf("SECRET_SERVICE_URL", "SECRET_SERVICE_CREDENTIAL", "SECRET_SERVICE_CA").forEach { key ->
+        if (System.getenv(key) == null) {
+            settings.getProperty(key)?.let { value ->
+                require(value.isNotBlank()) { "$key must not be empty" }
+                environment(key, value)
+            }
         }
     }
     if (System.getenv("FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART") == null) {

@@ -1,16 +1,38 @@
 # FileServer setup
 
-Copy `.env.example` to `.env` in this directory (or add the missing variables to
-your existing `.env`). Set `VERSION` to the version in `VERSION` and set
-`FILESERVER_PASSWORD` to a strong password for the FileServer HTTP user `dev`.
-Keep `.env` private. Compose and Gradle `:FileServer:bootRun` pass the password
-to Spring Security; an explicitly set `SPRING_SECURITY_USER_PASSWORD` takes
-precedence for Gradle. For a direct IDE run, set
-`SPRING_SECURITY_USER_PASSWORD` in the run configuration. Never use the default
-local password in production.
+FileServer authenticates users through [SecretService](../SecretService/README.md).
+An administrator provisions user accounts there; the old `dev` user, HTTP
+Basic and Spring login form are no longer supported. **All authenticated users
+currently have access to all files and transfers**; per-user and group file
+permissions are not implemented.
 
-Build the application JAR before running `docker compose up -d --build
-fileserver` from this directory.
+Copy `.env.example` to `.env` in this directory and keep it private. Set
+`VERSION` to the version in `VERSION`, generate two distinct random secrets
+of at least 32 characters for `SECRET_ADMIN_SECRET` and
+`SECRET_SERVICE_CREDENTIAL`, and provide the absolute paths for the SecretService
+certificate, private key, CA certificate and persistent database directory.
+The server certificate must include `secretservice` in its DNS subject
+alternative names for Docker and the hostname or IP clients use to reach it.
+The SecretService container runs as UID 65532: the database directory must be
+writable and the certificate and private key readable by that user. Restrict
+the permissions and back up the account database securely.
+
+Build the FileServer JAR, then run `docker compose up -d --build` from this
+directory. This builds the Go SecretService image locally. The FileServer
+container checks the SecretService certificate against `SECRET_SERVICE_CA`.
+For direct runs, configure `SECRET_SERVICE_URL` (an HTTPS URL),
+`SECRET_SERVICE_CREDENTIAL`, and optionally `SECRET_SERVICE_CA` (a PEM CA
+certificate; otherwise the JVM trust store is used). From this directory, run
+`./gradlew bootRun`; Gradle reads these values from `.env` when not already set
+in the environment. `SECRET_SERVICE_URL` must match the certificate hostname.
+
+Users sign in directly to SecretService using `POST /v1/login`; each FileServer
+request must include `X-User: <username>` and
+`Authorization: Bearer <accessToken>`. Access tokens last 15 minutes; refresh
+and logout are provided by SecretService. FileServer checks every request
+online and responds with 401 for invalid credentials or 503 if validation is
+unavailable. The service credential is private and is never sent by users.
+Use HTTPS to both services outside a trusted local environment.
 
 ## Published container
 
@@ -21,19 +43,11 @@ server. Package visibility is managed in GitHub Packages. If the package is
 private, authenticate Docker to `ghcr.io` with a GitHub token that can read
 the package before pulling.
 
-To deploy the published image using the Compose configuration, copy
-`compose.yaml` to the target host, create its `.env` file, then run from the
-directory containing `compose.yaml`:
-
-```sh
-docker compose up -d --no-build fileserver
-```
-
-Compose pulls `ghcr.io/jacklanger/dmp/fileserver:latest` if it is not already
-available locally. If the package is private, authenticate Docker to `ghcr.io`
-with a GitHub token that can read the package. To deploy a particular commit,
-set `FILESERVER_IMAGE_TAG` in `.env` to its full commit SHA. These commands
-retain the existing data and Caddy volumes.
+Compose can use the published FileServer image by setting
+`FILESERVER_IMAGE_TAG`, but the SecretService image must currently be built
+locally from the repository before using `--no-build`. A private GitHub package
+also requires Docker authentication to `ghcr.io`. Keep the persistent data and
+Caddy volumes when updating.
 
 Metadata is stored in SQLite at `data/metadata.db` relative to the application
 working directory. For a direct run, set the `FILESERVER_DATABASE_PATH`
@@ -54,7 +68,7 @@ Compose orphan; stop it separately after confirming it is no longer needed.
 The optional HTTPS override uses Caddy as a reverse proxy with its own local
 certificate authority (CA). It leaves the default development Compose setup
 unchanged. Use a stable IP address for the Raspberry Pi, such as a DHCP
-reservation, and set `FILESERVER_HTTPS_HOST` in `FileServer/.env` to that IP
+reservation, and set `FILESERVER_HTTPS_HOST` in `.env` to that IP
 address or a local hostname resolving to it. Do not include a scheme or port.
 If you use a hostname, configure DNS or hosts files on each client.
 
@@ -62,9 +76,8 @@ Set `FILE_SERVER_DATA` to an appropriate persistent host directory for the
 database and archives; if unset, it defaults to `./FileServer/data` relative to
 this directory.
 
-Copy both `compose.yaml` and `compose.https.yaml` to the target host and create
-the `.env` file there. No application source files or separate Caddyfile are
-needed. Run from the directory containing both Compose files:
+Provision the SecretService image, certificates, persistent data and `.env` on
+the target host. Run from the directory containing both Compose files:
 
 ```sh
 docker compose -f compose.yaml -f compose.https.yaml up -d --no-build
@@ -145,32 +158,28 @@ accessible. The current HTTP upload and download APIs still represent individual
 files; directory ingestion and browsing require separate API support.
 
 Uploads require `file` and JSON `metadata` multipart parts. The HTTP server
-requires authentication and CSRF protection; restart it after configuration
-changes. Multipart file parts are limited to 100 MiB by default; set
+requires the user and bearer token headers; cookie sessions and CSRF tokens
+are not used. Multipart file parts are limited to 100 MiB by default; set
 `FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART` (for example, `1GB`) to change
-the limit. Compose and Gradle `:FileServer:bootRun` also read it from
-`FileServer/.env`; set it in the run configuration for direct IDE runs. The
+the limit. Compose and Gradle `bootRun` also read it from
+`.env`; set it in the run configuration for direct IDE runs. The
 disk limit must be at least the multipart in-memory threshold (256 KiB by
 default). Multipart requests exceeding a size limit receive HTTP 413.
 The former SOAP starter was removed because it selected Spring MVC;
 there are currently no SOAP endpoints in FileServer.
 
-The DMP desktop client connects to the FileServer API from its Tauri webview.
 CORS is enabled for the local Vite origin and Tauri desktop origins by default.
 For another frontend origin, set `FILESERVER_CORS_ALLOWED_ORIGINS` to a
 comma-separated list of exact origins (for example,
-`https://portal.example.com`). Keep this list limited to trusted frontends; the
-client uses HTTP Basic authentication and a CSRF token for uploads.
-
-The server sends `Referrer-Policy: strict-origin-when-cross-origin` so browser
-form logins include their same-origin `Origin` header. This policy allows full
-referrer URLs on same-origin requests and only the origin on cross-origin
-requests; HTTPS-to-HTTP requests omit the referrer. Reverse proxies must not
-override it with `no-referrer`, which can cause login to be rejected by CORS.
+`https://portal.example.com`). Keep this list limited to trusted frontends.
+The portal's download function accepts an access token, but the portal does not
+yet provide a sign-in UI or refresh flow. Use the API or scripts until those
+client features are implemented. The legacy portal configuration still has a
+password field; FileServer no longer uses it.
 
 ## Resumable transfers
 
-See [TRANSFER-API.md](../docs/FileServer/TRANSFER-API.md) for the complete protocol and a Node.js
+See [TRANSFER-API.md](../wiki/FileServer/TRANSFER-API.md) for the complete protocol and a Node.js
 upload and resume example.
 
 For uploads that may be interrupted, create a session with
@@ -186,8 +195,10 @@ PowerShell (or `powershell -File scripts\create-transfer.ps1 <file>` in cmd).
 It creates a session, prints its transfer ID, uploads chunks, and completes
 the transfer. To resume an interrupted upload, run the same command with
 `-TransferId <id>`; use the same local file, whose checksum is verified when
-the transfer completes. The script uses `scripts\fileserver.netrc` for HTTP
-credentials. The Bash script `bash scripts/create-transfer.sh <file>` requires
+the transfer completes. Set `FILESERVER_USER` and `FILESERVER_ACCESS_TOKEN`
+in the environment before running the scripts. Tokens expire after 15 minutes;
+if a transfer outlasts its token, obtain a new one and resume with the transfer
+ID. The Bash script `bash scripts/create-transfer.sh <file>` requires
 Python 3.8 or later and currently only creates a session; send its chunks and
 complete it separately.
 

@@ -7,9 +7,9 @@ session has been completed.
 
 ## Protocol
 
-All requests require authentication. For the default Spring Security setup,
-clients making `POST`, `PATCH`, or `DELETE` requests also need the CSRF token
-and its associated session cookie. See the example below.
+All requests require `X-User` and `Authorization: Bearer <accessToken>`
+headers. Obtain a token by signing in to SecretService. All authenticated users
+can access all transfers until file-level access control is implemented.
 
 1. **Create a session:** Send `POST /files/transfers` with
    `Content-Type: application/json` and a JSON object containing:
@@ -45,16 +45,15 @@ abandons it.
 ## Node.js example
 
 This example uses Node.js 20 or later and its built-in `fetch`. Save it as
-`upload.mjs` and run it from a trusted environment. It uses HTTP Basic
-authentication, obtains the CSRF token from the login page, and keeps the
-associated cookie. It prints the transfer ID as soon as the session is
+`upload.mjs` and run it from a trusted environment. It uses a short-lived access
+token and prints the transfer ID as soon as the session is
 created, so save that ID to resume if the process stops. A production
 application should persist the ID and its association with the file.
 
-Set `FILESERVER_USER` and `FILESERVER_PASSWORD` in the process environment.
+Set `FILESERVER_USER` and `FILESERVER_ACCESS_TOKEN` in the process environment.
 Optionally set `FILESERVER_URL` (defaults to `http://localhost:8080`). Use
-HTTPS outside a trusted local environment; Basic credentials and file contents
-are otherwise sent unencrypted. Do not embed credentials in browser code.
+HTTPS outside a trusted local environment; tokens and file contents are
+otherwise sent unencrypted. If a token expires, obtain a new one and resume.
 
 ```javascript
 import { createHash } from "node:crypto";
@@ -64,24 +63,16 @@ import { basename } from "node:path";
 
 const [filePath, resumeId] = process.argv.slice(2);
 const baseUrl = (process.env.FILESERVER_URL || "http://localhost:8080").replace(/\/+$/, "");
-const { FILESERVER_USER: user, FILESERVER_PASSWORD: password } = process.env;
-if (!filePath || !user || !password) {
-  throw new Error("Usage: node upload.mjs <file> [transferId]; set FILESERVER_USER and FILESERVER_PASSWORD");
+const { FILESERVER_USER: user, FILESERVER_ACCESS_TOKEN: token } = process.env;
+if (!filePath || !user || !token) {
+  throw new Error("Usage: node upload.mjs <file> [transferId]; set FILESERVER_USER and FILESERVER_ACCESS_TOKEN");
 }
-
-const auth = `Basic ${Buffer.from(`${user}:${password}`, "utf8").toString("base64")}`;
-const login = await fetch(`${baseUrl}/login`, { redirect: "manual" });
-if (!login.ok) throw new Error(`Could not fetch login page: HTTP ${login.status}`);
-const loginHtml = await login.text();
-const token = loginHtml.match(/name="_csrf".*?value="([^"]*)"/)?.[1];
-const cookie = login.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ");
-if (!token || !cookie) throw new Error("Login response did not contain a CSRF token and session cookie");
 
 async function request(path, { method = "GET", headers = {}, body } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     redirect: "manual",
-    headers: { Authorization: auth, Cookie: cookie, "X-CSRF-TOKEN": token, ...headers },
+    headers: { Authorization: `Bearer ${token}`, "X-User": user, ...headers },
     body,
   });
   if (!response.ok) {
@@ -165,7 +156,7 @@ For example, in PowerShell:
 
 ```powershell
 $env:FILESERVER_USER = '<username>'
-$env:FILESERVER_PASSWORD = '<password>'
+$env:FILESERVER_ACCESS_TOKEN = '<access token>'
 node upload.mjs 'C:\path\to\file.pdf'
 # After an interruption:
 node upload.mjs 'C:\path\to\file.pdf' '<transferId>'

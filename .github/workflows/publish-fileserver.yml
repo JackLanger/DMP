@@ -31,7 +31,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build and test FileServer
-        run: ./gradlew :FileServer:build
+        working-directory: FileServer
+        run: ./gradlew build
 
       - name: Set image and application version
         id: metadata
