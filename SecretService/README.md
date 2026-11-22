@@ -55,6 +55,11 @@ cd SecretService
 go run ./cmd/secretservice
 ```
 
+Pushes to `main` publish AMD64 and ARM64 container images to
+`ghcr.io/jacklanger/dmp/secretservice` with `latest` and commit-SHA tags.
+See [FileServer's deployment instructions](../FileServer/README.md) for
+Compose configuration and registry authentication.
+
 The default listen address is `:8443`; set `SECRET_LISTEN_ADDRESS` to change it.
 `SECRET_ALLOWED_ORIGINS` is an optional comma-separated list of exact browser
 origins. Use a persistent database directory with restricted permissions,

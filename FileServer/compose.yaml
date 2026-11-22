@@ -14,10 +14,10 @@ services:
       - backend
 
   secretservice:
-    image: 'dmp-secretservice:local'
+    image: 'ghcr.io/jacklanger/dmp/secretservice:${SECRETSERVICE_IMAGE_TAG:-latest}'
     build:
-      context: ..
-      dockerfile: SecretService/Containerfile
+      context: ../SecretService
+      dockerfile: Containerfile
     environment:
       - 'SECRET_ADMIN_SECRET=${SECRET_ADMIN_SECRET:?Set SECRET_ADMIN_SECRET in FileServer/.env}'
       - 'SECRET_SERVICE_SECRET=${SECRET_SERVICE_CREDENTIAL:?Set SECRET_SERVICE_CREDENTIAL in FileServer/.env}'

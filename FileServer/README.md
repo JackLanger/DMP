@@ -38,20 +38,19 @@ and responds with 401 for invalid credentials, 503 if validation is unavailable,
 or 502 if FileServer is unavailable. The service credential is private and is
 never sent by users. Trust the SecretService certificate on each client.
 
-## Published container
+## Published containers
 
-Pushes to `main` build and test FileServer, then publish AMD64 and ARM64 images
-to `ghcr.io/jacklanger/dmp/fileserver` with `latest` and commit-SHA tags. The
-workflow publishes the image only; it does not automatically update a running
-server. Package visibility is managed in GitHub Packages. If the package is
-private, authenticate Docker to `ghcr.io` with a GitHub token that can read
-the package before pulling.
+Pushes to `main` build and test FileServer and SecretService, then publish AMD64
+and ARM64 images to `ghcr.io/jacklanger/dmp/fileserver` and
+`ghcr.io/jacklanger/dmp/secretservice`, respectively, with `latest` and
+commit-SHA tags. The workflows publish images only; they do not automatically
+update a running server. Package visibility is managed in GitHub Packages. If
+either package is private, authenticate Docker to `ghcr.io` with a GitHub token
+that can read the package before pulling.
 
-Compose can use the published FileServer image by setting
-`FILESERVER_IMAGE_TAG`, but the SecretService image must currently be built
-locally from the repository before using `--no-build`. A private GitHub package
-also requires Docker authentication to `ghcr.io`. Keep the persistent data and
-Caddy volumes when updating.
+Compose uses the published images with `--no-build`. Set `FILESERVER_IMAGE_TAG`
+and `SECRETSERVICE_IMAGE_TAG` to select tags; both default to `latest`. Keep
+the persistent data and Caddy volumes when updating.
 
 Metadata is stored in SQLite at `data/metadata.db` relative to the application
 working directory. For a direct run, set the `FILESERVER_DATABASE_PATH`
@@ -87,9 +86,10 @@ the target host. Run from the directory containing both Compose files:
 docker compose -f compose.yaml -f compose.https.yaml up -d --no-build
 ```
 
-Compose pulls the FileServer and Caddy images as needed. This override requires
-Docker Compose 2.24.4 or newer for `!reset` and inline configs. It removes the
-host port mapping for SecretService and exposes Caddy on ports 80 and 443.
+Compose pulls the FileServer, SecretService and Caddy images as needed. This
+override requires Docker Compose 2.24.4 or newer for `!reset` and inline
+configs. It removes the host port mapping for SecretService and exposes Caddy
+on ports 80 and 443.
 Use `https://<FILESERVER_HTTPS_HOST>` for both account and file APIs; port 80
 redirects to HTTPS. Ensure those ports are available and restrict network
 access with the host firewall as appropriate. Caddy verifies SecretService's

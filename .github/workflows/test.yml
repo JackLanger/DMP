@@ -33,6 +33,14 @@ jobs:
           cache-dependency-path: SecretService/go.sum
       - run: go test -race ./...
       - run: go vet ./...
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build SecretService image
+        uses: docker/build-push-action@v6
+        with:
+          context: SecretService
+          file: SecretService/Containerfile
+          push: false
 
   fileserver:
     name: FileServer tests
