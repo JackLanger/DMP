@@ -138,6 +138,31 @@ per-source limit of 30 requests per minute. Configure a separate ingress limit
 for multiple instances or when a reverse proxy aggregates clients, and restrict
 access to administrator and service credentials and the introspection endpoint.
 
+## Authentication integration
+
+`internal/auth` defines `IdentityProvider` and `Authorizer`. The default
+SQLite-backed provider issues and validates the existing tokens; the default
+authorizer permits authenticated requests, while the store still enforces
+group membership and administrator restrictions atomically. Use
+`api.NewWithAuth` or `api.NewGatewayWithAuth` to inject both implementations
+when composing the service.
+
+Providers return `auth.ErrInvalidCredentials` for rejected credentials and
+other errors for operational failures. `Authenticate` must return an identity
+with `Tokens` for the login response; `Validate` must return a user ID and
+canonical username. The gateway and introspection endpoint compare this
+username case-insensitively with the supplied username. Providers can
+implement `auth.SessionManager` for refresh and logout; otherwise those
+endpoints return 501. Account provisioning and groups remain in the local
+store, so identities used for groups must have matching local user IDs.
+
+Authorizers return `auth.ErrForbidden` to deny access and other errors for
+operational failures. File requests use resource type `file`, the request path
+as ID, and the HTTP method as action. Group requests use resource type `group`,
+the group ID and target username when present, and the `Action*` constants.
+The authorizer can restrict existing group access, but cannot override the
+store's membership and administrator rules.
+
 ## Verification
 
 ```sh

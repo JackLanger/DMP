@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS access_tokens (
   PRIMARY KEY (user_id, token_hash)
 );
 CREATE INDEX IF NOT EXISTS access_tokens_expiry ON access_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS access_tokens_hash ON access_tokens(token_hash);
 CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(refresh_expires_at);`
 	_, err := s.db.ExecContext(ctx, schema)
 	return err
@@ -248,11 +249,19 @@ WHERE u.username = ? AND s.refresh_hash = ? AND s.refresh_expires_at > ?`, usern
 }
 
 func (s *Store) Validate(ctx context.Context, username, token string) (Principal, error) {
+	return s.validate(ctx, username, token, true)
+}
+
+func (s *Store) ValidateToken(ctx context.Context, token string) (Principal, error) {
+	return s.validate(ctx, "", token, false)
+}
+
+func (s *Store) validate(ctx context.Context, username, token string, checkUsername bool) (Principal, error) {
 	var principal Principal
 	err := s.db.QueryRowContext(ctx, `SELECT u.id, u.username FROM access_tokens a
 JOIN users u ON u.id = a.user_id JOIN sessions s ON s.id = a.session_id
-WHERE u.username = ? AND a.token_hash = ? AND a.expires_at > ? AND s.refresh_expires_at > ?`,
-		username, digest(token), s.now().Unix(), s.now().Unix()).Scan(&principal.UserID, &principal.Username)
+WHERE (? = 0 OR u.username = ?) AND a.token_hash = ? AND a.expires_at > ? AND s.refresh_expires_at > ?`,
+		checkUsername, username, digest(token), s.now().Unix(), s.now().Unix()).Scan(&principal.UserID, &principal.Username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Principal{}, ErrInvalidCredentials
 	}
