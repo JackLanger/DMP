@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react"],
+  "options": {
+    "typeAware": true
+  },
+  "ignorePatterns": ["dist", "core/pkg"],
+  "overrides": [
+    {
+      "files": ["**/*.ts", "**/*.tsx"],
+      "rules": {
+        "typescript/no-floating-promises": "error"
+      }
+    }
+  ]
+}

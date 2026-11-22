@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "lint": "oxlint",
     "preview": "vite preview",
     "electron": "electron .",
     "dev:desktop": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
@@ -29,6 +30,8 @@
     "concurrently": "^10.0.7",
     "cross-env": "^10.1.0",
     "electron": "^45.4.1",
+    "oxlint": "^1.94.0",
+    "oxlint-tsgolint": "~7.0.2008",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "wait-on": "^9.5.1"
