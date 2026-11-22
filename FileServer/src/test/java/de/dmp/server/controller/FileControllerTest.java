@@ -58,7 +58,7 @@ class FileControllerTest {
 
 	private static MetadataDto metadata(UUID id, String name, String fileLocation) {
 
-		return new MetadataDto(id, name, "description", fileLocation, Instant.now(), Set.of());
+		return new MetadataDto(id, name, "description", fileLocation, Instant.now(), "FILE", Set.of());
 	}
 
 
@@ -385,7 +385,7 @@ class FileControllerTest {
 			TransferStatus started = client.post().uri("/files/transfers")
 					.contentType(MediaType.APPLICATION_JSON)
 					.bodyValue(new ResumableUploadRequest("report.txt", contents.length, sha256,
-							"description", Set.of("research")))
+							"description", "ARCHIVE", Set.of("research")))
 					.exchange()
 					.expectStatus().isCreated()
 					.expectHeader().exists("Location")
@@ -427,7 +427,9 @@ class FileControllerTest {
 			assertEquals(id, completed.documentId());
 			assertEquals(completed, retried);
 			assertArchiveContains(uploadDir.resolve(id + ".zip"), contents);
-			verify(uploadMetadataService, times(1)).create(any());
+			var metadata = org.mockito.ArgumentCaptor.forClass(MetadataDto.class);
+			verify(uploadMetadataService, times(1)).create(metadata.capture());
+			assertEquals("ARCHIVE", metadata.getValue().fileType());
 		}
 
 	}
@@ -444,7 +446,7 @@ class FileControllerTest {
 					return "report.txt";
 				}
 			});
-			body.part("metadata", "{\"description\":\"description\",\"tags\":[\"research\"]}")
+			body.part("metadata", "{\"description\":\"description\",\"fileType\":\"ARCHIVE\",\"tags\":[\"research\"]}")
 			    .contentType(MediaType.APPLICATION_JSON);
 
 			String key = WebTestClient.bindToController(controller).build()
@@ -460,6 +462,7 @@ class FileControllerTest {
 			var created = org.mockito.ArgumentCaptor.forClass(MetadataDto.class);
 			verify(uploadMetadataService).create(created.capture());
 			assertEquals("report.txt", created.getValue().name());
+			assertEquals("ARCHIVE", created.getValue().fileType());
 			assertEquals(Set.of("research"), created.getValue().tags());
 		}
 
@@ -468,7 +471,7 @@ class FileControllerTest {
 
 			byte[] contents = "upload contents".getBytes();
 			FilePart file = filePart("report.txt", contents);
-			UploadMetadataRequest request = new UploadMetadataRequest(null, "description", Set.of("research"));
+			UploadMetadataRequest request = new UploadMetadataRequest(null, "description", "FILE", Set.of("research"));
 
 			ResponseEntity<String> response = controller.upload(file, request)
 			                                            .block(Duration.ofSeconds(5));
@@ -513,7 +516,7 @@ class FileControllerTest {
 
 			ResponseEntity<String> response = controller.upload(
 					                                            file,
-					                                            new UploadMetadataRequest(id, "updated description", Set.of("updated"))
+					                                            new UploadMetadataRequest(id, "updated description", "FILE", Set.of("updated"))
 			                                                   )
 			                                            .block(Duration.ofSeconds(5));
 
@@ -548,7 +551,7 @@ class FileControllerTest {
 			when(uploadMetadataService.create(any())).thenReturn(Mono.error(new IllegalStateException("metadata failed")));
 
 			assertThrows(IllegalStateException.class, () -> controller.upload(
-					                                                          file, new UploadMetadataRequest(null, "description", Set.of())
+					                                                          file, new UploadMetadataRequest(null, "description", "FILE", Set.of())
 			                                                                 )
 			                                                          .block(Duration.ofSeconds(5)));
 			assertEquals(0, archiveCount());
@@ -561,7 +564,7 @@ class FileControllerTest {
 			when(file.transferTo(any(Path.class))).thenReturn(Mono.error(new IOException("transfer failed")));
 
 			assertThrows(RuntimeException.class, () -> controller.upload(
-					                                                     file, new UploadMetadataRequest(null, "description", Set.of())
+					                                                     file, new UploadMetadataRequest(null, "description", "FILE", Set.of())
 			                                                            )
 			                                                     .block(Duration.ofSeconds(5)));
 			verify(uploadMetadataService, never()).create(any());
@@ -581,7 +584,7 @@ class FileControllerTest {
 
 			assertThrows(IllegalStateException.class, () -> controller.upload(
 					                                                          filePart("replacement.txt", "contents".getBytes()),
-					                                                          new UploadMetadataRequest(id, "description", Set.of())
+					                                                          new UploadMetadataRequest(id, "description", "FILE", Set.of())
 			                                                                 )
 			                                                          .block(Duration.ofSeconds(5)));
 			assertEquals("old archive", Files.readString(uploadDir.resolve("old-storage-key.zip")));

@@ -1,6 +1,7 @@
 package de.dmp.server.controller;
 
 
+import de.dmp.server.data.FileType;
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.data.Metadata;
 import de.dmp.server.service.ReactiveMetadataService;
@@ -146,38 +147,6 @@ public class FileController {
 		return new Range(start, end);
 	}
 
-	private record Range(long start, long end) {
-		long length() {
-			return end - start + 1;
-		}
-	}
-
-	private static final class LimitedInputStream extends FilterInputStream {
-		private long remaining;
-
-		private LimitedInputStream(InputStream input, long limit) {
-			super(input);
-			remaining = limit;
-		}
-
-		@Override
-		public int read() throws IOException {
-			if (remaining == 0) return -1;
-			int value = super.read();
-			if (value != -1) remaining--;
-			return value;
-		}
-
-		@Override
-		public int read(byte[] buffer, int offset, int length) throws IOException {
-			if (length == 0) return 0;
-			if (remaining == 0) return -1;
-			int count = super.read(buffer, offset, (int) Math.min(length, remaining));
-			if (count > 0) remaining -= count;
-			return count;
-		}
-	}
-
 	@PostMapping("/transfers")
 	public Mono<ResponseEntity<TransferStatus>> createTransfer(@RequestBody ResumableUploadRequest request) {
 		return Mono.fromCallable(() -> transfers.create(request))
@@ -223,15 +192,16 @@ public class FileController {
 				.subscribeOn(Schedulers.boundedElastic())
 				.flatMap(upload -> {
 					String storageKey = id.toString();
+					TransferCompletion body = new TransferCompletion(id, id, upload.sha256());
 					if (upload.completedStorageKey() != null) {
-						return Mono.just(ResponseEntity.ok(new TransferCompletion(id, id, upload.sha256())));
+						return Mono.just(ResponseEntity.ok(body));
 					}
 					if (!transfers.beginFinalization(id)) {
 						return Mono.error(new org.springframework.web.server.ResponseStatusException(
 								HttpStatus.CONFLICT, "Transfer is already being completed"));
 					}
 					MetadataDto metadata = new MetadataDto(id, upload.filename(), upload.description(), storageKey,
-							Instant.now(), upload.tags());
+					                                       Instant.now(), upload.filetype(), upload.tags());
 					Mono<Metadata> persisted = metadataService.findById(id)
 							.flatMap(existing -> {
 								if (!existing.getFileLocation().equals(storageKey)) {
@@ -245,7 +215,7 @@ public class FileController {
 					return persisted
 							.flatMap(ignored -> Mono.fromRunnable(() -> transfers.markCompleted(id, storageKey))
 									.subscribeOn(Schedulers.boundedElastic()))
-							.thenReturn(ResponseEntity.ok(new TransferCompletion(id, id, upload.sha256())))
+							.thenReturn(ResponseEntity.ok(body))
 							.doFinally(ignored -> transfers.endFinalization(id));
 				});
 	}
@@ -279,7 +249,13 @@ public class FileController {
 			@RequestPart("metadata") UploadMetadataRequest metadata
 	                                          ) {
 
-		return Mono.defer(() -> archive.store(file)
+		return Mono.defer(() -> {
+			try {
+				FileType.parse(metadata.fileType());
+			} catch (IllegalArgumentException ex) {
+				return Mono.error(new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex));
+			}
+			return archive.store(file)
 				.flatMap(storageKey -> Mono.defer(() -> persistUpload(file, metadata, storageKey))
 						.onErrorResume(ex -> deleteArchive(storageKey)
 								.onErrorResume(cleanup -> {
@@ -287,12 +263,13 @@ public class FileController {
 									return Mono.empty();
 								})
 								.then(Mono.error(ex))))
-				.map(storageKey -> ResponseEntity.status(HttpStatus.CREATED).body(storageKey)))
+				.map(storageKey -> ResponseEntity.status(HttpStatus.CREATED).body(storageKey));
+		})
 				.cache();
 	}
 
 	private Mono<String> persistUpload(FilePart file, UploadMetadataRequest metadata, String storageKey) {
-		MetadataDto replacement = new MetadataDto(file.filename(), metadata.description(), storageKey, metadata.tags());
+		MetadataDto replacement = new MetadataDto(file.filename(), metadata.description(), storageKey, metadata.fileType(), metadata.tags());
 		Mono<Metadata> existing = metadata.uuid() == null
 				? Mono.empty() : metadataService.findById(metadata.uuid());
 		return existing.flatMap(old -> {
@@ -309,6 +286,40 @@ public class FileController {
 
 	private Mono<Void> deleteArchive(String storageKey) {
 		return archive.delete(storageKey);
+	}
+
+
+	private record Range(long start, long end) {
+		long length() {
+			return end - start + 1;
+		}
+	}
+
+
+	private static final class LimitedInputStream extends FilterInputStream {
+		private long remaining;
+
+		private LimitedInputStream(InputStream input, long limit) {
+			super(input);
+			remaining = limit;
+		}
+
+		@Override
+		public int read() throws IOException {
+			if (remaining == 0) return -1;
+			int value = super.read();
+			if (value != -1) remaining--;
+			return value;
+		}
+
+		@Override
+		public int read(byte[] buffer, int offset, int length) throws IOException {
+			if (length == 0) return 0;
+			if (remaining == 0) return -1;
+			int count = super.read(buffer, offset, (int) Math.min(length, remaining));
+			if (count > 0) remaining -= count;
+			return count;
+		}
 	}
 
 }

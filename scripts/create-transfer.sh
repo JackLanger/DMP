@@ -48,7 +48,7 @@ with open(path, "rb") as source:
         size += len(chunk)
         digest.update(chunk)
 json.dump({"filename": os.path.basename(path), "size": size, "sha256": digest.hexdigest(),
-           "description": "Test upload", "tags": ["test"]}, sys.stdout)
+           "description": "Test upload", "fileType": "FILE", "tags": ["test"]}, sys.stdout)
 PY
 
 curl -fsS -i -H "@$auth_headers" \

@@ -127,6 +127,7 @@ class CreateTransferTest(unittest.TestCase):
         self.assertEqual(self.server.data, data)
         self.assertEqual(self.server.chunk_sizes, [262144, 262144, 256])
         self.assertTrue(self.server.completed)
+        self.assertEqual(self.server.request["fileType"], "FILE")
         self.assertIn(self.server.id, result.stdout)
 
     def test_resumes_after_failure(self):

@@ -165,7 +165,10 @@ files; directory ingestion and browsing require separate API support.
 
 Uploads require `file` and JSON `metadata` multipart parts. The gateway
 requires the user and bearer token headers; cookie sessions and CSRF tokens
-are not used. Multipart file parts are limited to 100 MiB by default; set
+are not used. Metadata must include `fileType`: `FILE`, `DIRECTORY`, or
+`ARCHIVE` (case-insensitive). These are classifications, not MIME types;
+existing metadata and in-progress transfers are migrated as `FILE`. Multipart
+file parts are limited to 100 MiB by default; set
 `FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART` (for example, `1GB`) to change
 the limit. Compose and Gradle `bootRun` also read it from
 `.env`; set it in the run configuration for direct IDE runs. The
@@ -190,7 +193,7 @@ upload and resume example.
 
 For uploads that may be interrupted, create a session with
 `POST /files/transfers` and JSON containing `filename`, `size`, `sha256`
-(hexadecimal SHA-256 of the complete file), `description`, and `tags`. The
+(hexadecimal SHA-256 of the complete file), `description`, `fileType`, and `tags`. The
 response includes a stable `transferId`, `offset`, `length`, and `expiresAt`.
 Persist the transfer ID on the client and query `GET` or `HEAD
 /files/transfers/{transferId}` after reconnecting to recover the current

@@ -12,5 +12,5 @@ chmod 600 "$auth_headers"
 printf 'X-User: %s\nAuthorization: Bearer %s\n' "$FILESERVER_USER" "$FILESERVER_ACCESS_TOKEN" > "$auth_headers"
 curl --fail-with-body -i -H "@$auth_headers" \
   -F "file=@$1" \
-  -F 'metadata={"description":"Test upload","tags":["test"]};type=application/json' \
+  -F 'metadata={"description":"Test upload","fileType":"FILE","tags":["test"]};type=application/json' \
   "${FILESERVER_URL:-https://localhost:8443}/files"

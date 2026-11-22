@@ -22,7 +22,7 @@ try {
     $metadataFile = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText(
         $metadataFile,
-        '{"description":"Test upload","tags":["test"]}',
+        '{"description":"Test upload","fileType":"FILE","tags":["test"]}',
         [System.Text.UTF8Encoding]::new($false)
     )
 

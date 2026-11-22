@@ -26,7 +26,7 @@ class ResumableTransferServiceTest {
 
 	private ResumableUploadRequest request(byte[] content) throws Exception {
 		return new ResumableUploadRequest("report.txt", content.length, sha256(content),
-				"description", Set.of("research"));
+				"description", "archive", Set.of("research"));
 	}
 
 	@Test
@@ -49,6 +49,7 @@ class ResumableTransferServiceTest {
 		ResumableTransferService.Upload upload = restarted.complete(id);
 		assertEquals(contents.length, java.nio.file.Files.size(upload.path()));
 		assertEquals(sha256(contents), upload.sha256());
+		assertEquals("ARCHIVE", upload.filetype());
 		assertEquals(Set.of("research"), upload.tags());
 		restarted.markCompleted(id, id.toString());
 		assertEquals(id.toString(), restarted.complete(id).completedStorageKey());
@@ -78,5 +79,27 @@ class ResumableTransferServiceTest {
 
 		ResponseStatusException missing = assertThrows(ResponseStatusException.class, () -> service.status(id));
 		assertEquals(HttpStatus.NOT_FOUND, missing.getStatusCode());
+	}
+
+	@Test
+	void readsLegacyTransferAndRejectsInvalidNewTypes() throws Exception {
+		byte[] contents = "legacy".getBytes();
+		ResumableTransferService service = new ResumableTransferService(uploadDir, Duration.ofHours(1));
+		UUID id = service.create(request(contents)).transferId();
+		service.append(id, 0, contents.length - 1, contents.length, contents);
+		Path state = uploadDir.resolve(".transfers").resolve(id.toString()).resolve("transfer.properties");
+		var properties = new java.util.Properties();
+		try (var input = java.nio.file.Files.newInputStream(state)) {
+			properties.load(input);
+		}
+		properties.remove("filetype");
+		try (var output = java.nio.file.Files.newOutputStream(state)) {
+			properties.store(output, null);
+		}
+		assertEquals("FILE", new ResumableTransferService(uploadDir, Duration.ofHours(1)).complete(id).filetype());
+		for (String type : new String[] {null, "", "image/png"}) {
+			var invalid = new ResumableUploadRequest("file", 0, sha256(new byte[0]), "description", type, Set.of());
+			assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class, () -> service.create(invalid)).getStatusCode());
+		}
 	}
 }

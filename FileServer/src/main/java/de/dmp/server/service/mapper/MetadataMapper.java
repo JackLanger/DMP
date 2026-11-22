@@ -2,6 +2,7 @@ package de.dmp.server.service.mapper;
 
 
 import de.dmp.server.data.Metadata;
+import de.dmp.server.data.FileType;
 import de.dmp.server.data.Tag;
 import de.dmp.server.data.dto.MetadataDto;
 import de.dmp.server.data.vo.MetadataVO;
@@ -16,7 +17,7 @@ public class MetadataMapper implements java.util.function.Function<MetadataVO, M
 
   public MetadataDto toDto(Metadata metadata) {
     return new MetadataDto(metadata.getId(), metadata.getName(), metadata.getDescription(),
-        metadata.getFileLocation(), metadata.getCreatedAt(),
+        metadata.getFileLocation(), metadata.getCreatedAt(), metadata.getType().name(),
         metadata.getTags().stream().map(Tag::getName).collect(java.util.stream.Collectors.toSet()));
   }
 
@@ -26,6 +27,7 @@ public class MetadataMapper implements java.util.function.Function<MetadataVO, M
     Metadata entity = new Metadata();
     entity.setId(vo.id());
     entity.setName(vo.name());
+    entity.setType(FileType.parse(vo.fileType()));
     entity.setDescription(vo.description());
     entity.setFileLocation(vo.fileLocation());
     if (vo.tags() != null) {
@@ -43,6 +45,7 @@ public class MetadataMapper implements java.util.function.Function<MetadataVO, M
   public Metadata apply(MetadataVO vo, Metadata entity) {
 
     entity.setName(vo.name());
+    entity.setType(FileType.parse(vo.fileType()));
     entity.setDescription(vo.description());
     entity.setFileLocation(vo.fileLocation());
     if (vo.tags() != null) {

@@ -49,6 +49,7 @@ try {
             size = $length
             sha256 = $checksum
             description = 'Test upload'
+            fileType = 'FILE'
             tags = @('test')
         } | ConvertTo-Json -Compress
         [System.IO.File]::WriteAllText($requestFile, $request, [System.Text.UTF8Encoding]::new($false))

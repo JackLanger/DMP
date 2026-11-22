@@ -2,6 +2,7 @@ package de.dmp.server.repositories;
 
 import com.github.f4b6a3.ulid.UlidCreator;
 import de.dmp.server.data.Metadata;
+import de.dmp.server.data.FileType;
 import de.dmp.server.data.Tag;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
@@ -32,17 +33,33 @@ public class SqliteMetadataRepository {
 		Files.createDirectories(path.getParent());
 		url = "jdbc:sqlite:" + path;
 		try (Connection connection = open(); Statement statement = connection.createStatement()) {
+			int schemaVersion;
 			try (ResultSet version = statement.executeQuery("PRAGMA user_version")) {
-				if (version.next() && version.getInt(1) > 1) {
+				schemaVersion = version.next() ? version.getInt(1) : 0;
+				if (schemaVersion > 2) {
 					throw new SQLException("Unsupported metadata database schema version");
 				}
 			}
-			statement.execute("CREATE TABLE IF NOT EXISTS metadata (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, "
-					+ "description TEXT NOT NULL, file_location TEXT, created_at TEXT NOT NULL)");
-			statement.execute("CREATE TABLE IF NOT EXISTS metadata_tags (metadata_id TEXT NOT NULL, name TEXT NOT NULL, "
-					+ "PRIMARY KEY (metadata_id, name), FOREIGN KEY (metadata_id) REFERENCES metadata(id) ON DELETE CASCADE)");
-			statement.execute("CREATE INDEX IF NOT EXISTS metadata_tags_name_idx ON metadata_tags(name)");
-			statement.execute("PRAGMA user_version = 1");
+			connection.setAutoCommit(false);
+			try {
+				statement.execute("CREATE TABLE IF NOT EXISTS metadata (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, "
+						+ "description TEXT NOT NULL, file_location TEXT, created_at TEXT NOT NULL)");
+				statement.execute("CREATE TABLE IF NOT EXISTS metadata_tags (metadata_id TEXT NOT NULL, name TEXT NOT NULL, "
+						+ "PRIMARY KEY (metadata_id, name), FOREIGN KEY (metadata_id) REFERENCES metadata(id) ON DELETE CASCADE)");
+				statement.execute("CREATE INDEX IF NOT EXISTS metadata_tags_name_idx ON metadata_tags(name)");
+				if (schemaVersion < 2) {
+					statement.execute("ALTER TABLE metadata ADD COLUMN file_type TEXT NOT NULL DEFAULT 'FILE'");
+				}
+				statement.execute("PRAGMA user_version = 2");
+				connection.commit();
+			} catch (SQLException ex) {
+				try {
+					connection.rollback();
+				} catch (SQLException rollbackFailure) {
+					ex.addSuppressed(rollbackFailure);
+				}
+				throw ex;
+			}
 		}
 	}
 
@@ -77,7 +94,7 @@ public class SqliteMetadataRepository {
 	}
 
 	private List<Metadata> query(String where, String parameter) throws SQLException {
-		String sql = "SELECT m.id, m.name, m.description, m.file_location, m.created_at, t.name AS tag_name "
+		String sql = "SELECT m.id, m.name, m.description, m.file_location, m.created_at, m.file_type, t.name AS tag_name "
 				+ "FROM metadata m LEFT JOIN metadata_tags t ON t.metadata_id = m.id " + where + " ORDER BY m.rowid, t.rowid";
 		Map<UUID, Metadata> results = new LinkedHashMap<>();
 		try (Connection connection = open(); PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -93,6 +110,7 @@ public class SqliteMetadataRepository {
 						metadata.setDescription(rows.getString("description"));
 						metadata.setFileLocation(rows.getString("file_location"));
 						metadata.setCreatedAt(Instant.parse(rows.getString("created_at")));
+						metadata.setType(FileType.parse(rows.getString("file_type")));
 						results.put(id, metadata);
 					}
 					String name = rows.getString("tag_name");
@@ -122,14 +140,15 @@ public class SqliteMetadataRepository {
 			connection.setAutoCommit(false);
 			try {
 				String sql = insert
-						? "INSERT INTO metadata (name, description, file_location, created_at, id) VALUES (?, ?, ?, ?, ?)"
-						: "UPDATE metadata SET name = ?, description = ?, file_location = ?, created_at = ? WHERE id = ?";
+						? "INSERT INTO metadata (name, description, file_location, created_at, file_type, id) VALUES (?, ?, ?, ?, ?, ?)"
+						: "UPDATE metadata SET name = ?, description = ?, file_location = ?, created_at = ?, file_type = ? WHERE id = ?";
 				try (PreparedStatement statement = connection.prepareStatement(sql)) {
 					statement.setString(1, metadata.getName());
 					statement.setString(2, metadata.getDescription());
 					statement.setString(3, metadata.getFileLocation());
 					statement.setString(4, metadata.getCreatedAt().toString());
-					statement.setString(5, metadata.getId().toString());
+					statement.setString(5, metadata.getType().name());
+					statement.setString(6, metadata.getId().toString());
 					if (statement.executeUpdate() != 1) throw new SQLException("Metadata not found: " + metadata.getId());
 				}
 				if (!insert) {

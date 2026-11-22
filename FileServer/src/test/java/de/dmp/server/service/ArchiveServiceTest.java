@@ -80,7 +80,7 @@ class ArchiveServiceTest {
 		assertNotEquals(firstKey, secondKey);
 
 		for (String key : Set.of(firstKey, secondKey)) {
-			MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
+			MetadataDto metadata = new MetadataDto("file.txt", "description", key, "FILE", Set.of());
 			ArchivedFile result = archive.retrieve(metadata).block(Duration.ofSeconds(5));
 			assertNotNull(result);
 			assertEquals(contents.length, result.size());
@@ -106,7 +106,7 @@ class ArchiveServiceTest {
 		assertEquals(key, archive.store(source, "report.txt", key).block(Duration.ofSeconds(5)));
 		assertEquals(key, archive.store(source, "report.txt", key).block(Duration.ofSeconds(5)));
 
-		MetadataDto metadata = new MetadataDto("report.txt", "description", key, Set.of());
+		MetadataDto metadata = new MetadataDto("report.txt", "description", key, "FILE", Set.of());
 		ArchivedFile result = archive.retrieve(metadata).block(Duration.ofSeconds(5));
 		assertNotNull(result);
 		assertEquals(java.util.HexFormat.of().formatHex(
@@ -145,7 +145,7 @@ class ArchiveServiceTest {
 				when(file.filename()).thenReturn("file.raw");
 				String multipartKey = service.store(file).block(Duration.ofSeconds(5));
 				assertTrue(Files.exists(uploadDir.resolve(multipartKey + ".raw")));
-				MetadataDto multipart = new MetadataDto("file.raw", "", multipartKey, Set.of());
+				MetadataDto multipart = new MetadataDto("file.raw", "", multipartKey, "FILE", Set.of());
 				try (var input = service.retrieve(multipart).block(Duration.ofSeconds(5)).content().getInputStream()) {
 					assertArrayEquals(contents, input.readAllBytes());
 				}
@@ -160,7 +160,7 @@ class ArchiveServiceTest {
 				Path directory = Files.createDirectory(uploadDir.resolve("directory"));
 				Files.write(directory.resolve("child"), contents);
 				assertEquals("directory-key", service.store(directory, "directory", "directory-key").block(Duration.ofSeconds(5)));
-				MetadataDto directoryMetadata = new MetadataDto("directory", "", "directory-key", Set.of());
+				MetadataDto directoryMetadata = new MetadataDto("directory", "", "directory-key", "DIRECTORY", Set.of());
 				try (var input = service.retrieve(directoryMetadata).block(Duration.ofSeconds(5)).content().getInputStream()) {
 					assertArrayEquals(contents, input.readAllBytes());
 				}
@@ -170,7 +170,7 @@ class ArchiveServiceTest {
 					zip.write(contents);
 					zip.closeEntry();
 				}
-				MetadataDto legacy = new MetadataDto("old.txt", "", "legacy", Set.of());
+				MetadataDto legacy = new MetadataDto("old.txt", "", "legacy", "FILE", Set.of());
 				try (var input = service.retrieve(legacy).block(Duration.ofSeconds(5)).content().getInputStream()) {
 					assertArrayEquals(contents, input.readAllBytes());
 				}
@@ -222,7 +222,7 @@ class ArchiveServiceTest {
 		String key = result.subscribeOn(Schedulers.parallel()).block(Duration.ofSeconds(5));
 		assertEquals(key, result.block(Duration.ofSeconds(5)));
 		verify(file, times(1)).transferTo(any(Path.class));
-		MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
+		MetadataDto metadata = new MetadataDto("file.txt", "description", key, "FILE", Set.of());
 		try (var input = archive.retrieve(metadata).block(Duration.ofSeconds(5)).content().getInputStream()) {
 			assertArrayEquals(contents, input.readAllBytes());
 		}
@@ -273,7 +273,7 @@ class ArchiveServiceTest {
 
 		String key = result.block(Duration.ofSeconds(5));
 		assertFalse(Files.exists(temporary));
-		MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
+		MetadataDto metadata = new MetadataDto("file.txt", "description", key, "FILE", Set.of());
 		try (var input = archive.retrieve(metadata).block(Duration.ofSeconds(5)).content().getInputStream()) {
 			assertArrayEquals(contents, input.readAllBytes());
 		}
@@ -284,7 +284,7 @@ class ArchiveServiceTest {
 	void corruptArchiveErrorsPropagateFromRetrieve() throws Exception {
 
 		Files.writeString(uploadDir.resolve("bad.zip"), "not a zip");
-		MetadataDto metadata = new MetadataDto("file.txt", "description", "bad", Set.of());
+		MetadataDto metadata = new MetadataDto("file.txt", "description", "bad", "FILE", Set.of());
 		RuntimeException failure = assertThrows(RuntimeException.class,
 				() -> archive.retrieve(metadata).block(Duration.ofSeconds(5)));
 		assertInstanceOf(IOException.class, failure.getCause());
@@ -302,7 +302,7 @@ class ArchiveServiceTest {
 			zip.write("second".getBytes());
 			zip.closeEntry();
 		}
-		MetadataDto metadata = new MetadataDto("file.txt", "description", "multiple", Set.of());
+		MetadataDto metadata = new MetadataDto("file.txt", "description", "multiple", "FILE", Set.of());
 		ArchivedFile result = archive.retrieve(metadata).block(Duration.ofSeconds(5));
 		assertNotNull(result);
 		assertEquals(5, result.size());
@@ -316,12 +316,12 @@ class ArchiveServiceTest {
 	@Test
 	void missingAndEmptyArchivesReturnEmptyResults() throws Exception {
 
-		MetadataDto missing = new MetadataDto("file.txt", "description", "missing", Set.of());
+		MetadataDto missing = new MetadataDto("file.txt", "description", "missing", "FILE", Set.of());
 		assertNull(archive.retrieve(missing).block(Duration.ofSeconds(5)));
 		try (var zip = new ZipOutputStream(Files.newOutputStream(uploadDir.resolve("empty.zip")))) {
 			zip.finish();
 		}
-		MetadataDto empty = new MetadataDto("file.txt", "description", "empty", Set.of());
+		MetadataDto empty = new MetadataDto("file.txt", "description", "empty", "FILE", Set.of());
 		assertNull(archive.retrieve(empty).block(Duration.ofSeconds(5)));
 	}
 
@@ -329,7 +329,7 @@ class ArchiveServiceTest {
 	void openingRetrievedContentReportsArchiveRemoval() throws Exception {
 
 		String key = archive.store(filePart("content".getBytes())).block(Duration.ofSeconds(5));
-		MetadataDto metadata = new MetadataDto("file.txt", "description", key, Set.of());
+		MetadataDto metadata = new MetadataDto("file.txt", "description", key, "FILE", Set.of());
 		ArchivedFile result = archive.retrieve(metadata).block(Duration.ofSeconds(5));
 		assertNotNull(result);
 		archive.delete(key).block(Duration.ofSeconds(5));
@@ -369,7 +369,7 @@ class ArchiveServiceTest {
 			String key = store.execute(context, scheduler).block(Duration.ofSeconds(5));
 			assertNotNull(key);
 			ArchiveOperation<ArchivedFile> retrieve = new RetrieveOperation(
-					new MetadataDto("file.txt", "description", key, Set.of()));
+					new MetadataDto("file.txt", "description", key, "FILE", Set.of()));
 			ArchivedFile result = retrieve.execute(context, scheduler).block(Duration.ofSeconds(5));
 			assertNotNull(result);
 			try (var input = result.content().getInputStream()) {

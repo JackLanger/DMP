@@ -18,6 +18,7 @@ can access all transfers until file-level access control is implemented.
    - `filename`: the file name.
    - `size`: the total file size in bytes.
    - `sha256`: the hexadecimal SHA-256 digest of the entire file.
+   - `fileType`: `FILE`, `DIRECTORY`, or `ARCHIVE` (case-insensitive).
    - `description`: a description, and `tags`: an array of strings.
 
    Save the returned `transferId` immediately. The response includes `offset`,
@@ -105,6 +106,7 @@ try {
         size,
         sha256: await sha256(filePath),
         description: "Uploaded from Node.js",
+        fileType: "FILE",
         tags: [],
       }),
     })).json();
