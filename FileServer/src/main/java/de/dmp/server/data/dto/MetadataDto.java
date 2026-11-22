@@ -10,14 +10,14 @@ import java.util.UUID;
 
 public record MetadataDto(
     UUID id, String name, String description, String fileLocation, Instant createdAt,
-    Set<String> tags
+    String fileType, Set<String> tags
 ) {
 
-  public MetadataDto(String name, String description, String fileLocation, Set<String> tags) {
+  public MetadataDto(String name, String description, String fileLocation, String fileType, Set<String> tags) {
 
     this(
         UlidCreator.getUlid()
-                   .toUuid(), name, description, fileLocation, Instant.now(), tags
+                   .toUuid(), name, description, fileLocation, Instant.now(), fileType, tags
     );
   }
 

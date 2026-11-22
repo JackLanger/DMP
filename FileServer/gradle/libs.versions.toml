@@ -46,8 +46,6 @@ spring-boot-starter-grpc-server-test = { module = "org.springframework.boot:spri
 # spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 # spring-boot-starter-jdbc-test = { module = "org.springframework.boot:spring-boot-starter-jdbc-test" }
 spring-boot-starter-restdocs = { module = "org.springframework.boot:spring-boot-starter-restdocs" }
-spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security" }
-spring-boot-starter-security-test = { module = "org.springframework.boot:spring-boot-starter-security-test" }
 # spring-boot-starter-session-jdbc = { module = "org.springframework.boot:spring-boot-starter-session-jdbc" }
 # spring-boot-starter-session-jdbc-test = { module = "org.springframework.boot:spring-boot-starter-session-jdbc-test" }
 spring-boot-starter-webflux = { module = "org.springframework.boot:spring-boot-starter-webflux" }
@@ -73,7 +71,6 @@ json = [
 spring-core = [
     "spring-boot-starter-actuator",
     "spring-boot-starter-cache",
-    "spring-boot-starter-security",
     "spring-boot-starter-webflux",
     "reactor-kotlin-extensions",
     "kotlin-reflect",
@@ -88,7 +85,6 @@ spring-other = [
 spring-core-test = [
     "spring-boot-starter-actuator-test",
     "spring-boot-starter-cache-test",
-    "spring-boot-starter-security-test",
     "spring-boot-starter-webflux-test"
 ]
 

@@ -2,6 +2,7 @@ package de.dmp.server.service.transfer;
 
 import de.dmp.server.controller.ResumableUploadRequest;
 import de.dmp.server.controller.TransferStatus;
+import de.dmp.server.data.FileType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -71,6 +72,12 @@ public class ResumableTransferService {
 		if (request.tags() != null && request.tags().stream().anyMatch(Objects::isNull)) {
 			throw badRequest("Tags cannot contain null values");
 		}
+		FileType fileType;
+		try {
+			fileType = FileType.parse(request.fileType());
+		} catch (IllegalArgumentException ex) {
+			throw badRequest(ex.getMessage());
+		}
 		cleanupExpired();
 		UUID id = UUID.randomUUID();
 		Instant expiresAt = Instant.now().plus(expiry);
@@ -79,6 +86,7 @@ public class ResumableTransferService {
 		properties.setProperty("size", Long.toString(request.size()));
 		properties.setProperty("sha256", request.sha256().toLowerCase());
 		properties.setProperty("description", encode(request.description() == null ? "" : request.description()));
+		properties.setProperty("filetype", encode(fileType.name()));
 		Set<String> tags = request.tags() == null ? Set.of() : request.tags();
 		properties.setProperty("tagCount", Integer.toString(tags.size()));
 		int index = 0;
@@ -163,7 +171,9 @@ public class ResumableTransferService {
 				.mapToObj(index -> decode(properties.getProperty("tag." + index)))
 				.collect(java.util.stream.Collectors.toUnmodifiableSet());
 		return new Upload(id, partPath(id), decode(properties.getProperty("filename")),
-				decode(properties.getProperty("description")), tags, checksum, completedStorageKey);
+				decode(properties.getProperty("description")),
+				properties.containsKey("filetype") ? decode(properties.getProperty("filetype")) : FileType.FILE.name(),
+				tags, checksum, completedStorageKey);
 	}
 
 	public synchronized void markCompleted(UUID id, String storageKey) {
@@ -239,7 +249,7 @@ public class ResumableTransferService {
 		file.position(start);
 		ByteBuffer stored = ByteBuffer.allocate(chunk.length);
 		while (stored.hasRemaining() && file.read(stored) != -1) { }
-		return stored.hasRemaining() == false && MessageDigest.isEqual(stored.array(), chunk);
+		return !stored.hasRemaining() && MessageDigest.isEqual(stored.array(), chunk);
 	}
 
 	private TransferStatus status(UUID id, Properties properties) {
@@ -323,7 +333,7 @@ public class ResumableTransferService {
 		return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
 	}
 
-	public record Upload(UUID id, Path path, String filename, String description, Set<String> tags,
+	public record Upload(UUID id, Path path, String filename, String description, String filetype, Set<String> tags,
 			String sha256, String completedStorageKey) {
 	}
 }

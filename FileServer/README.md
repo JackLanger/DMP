@@ -1,39 +1,56 @@
 # FileServer setup
 
-Copy `.env.example` to `.env` in this directory (or add the missing variables to
-your existing `.env`). Set `VERSION` to the version in `VERSION` and set
-`FILESERVER_PASSWORD` to a strong password for the FileServer HTTP user `dev`.
-Keep `.env` private. Compose and Gradle `:FileServer:bootRun` pass the password
-to Spring Security; an explicitly set `SPRING_SECURITY_USER_PASSWORD` takes
-precedence for Gradle. For a direct IDE run, set
-`SPRING_SECURITY_USER_PASSWORD` in the run configuration. Never use the default
-local password in production.
+FileServer has no user authentication. [SecretService](../SecretService/README.md)
+authenticates requests and proxies them to FileServer on a private network.
+**All authenticated users have access to all files and transfers**; per-user
+and group file permissions are not implemented.
 
-Build the application JAR before running `docker compose up -d --build
-fileserver` from this directory.
+**Never expose FileServer directly.** Anyone with network access to FileServer,
+including the host and other containers on its private network, can access all
+files without credentials. Standalone and other deployments must enforce
+equivalent network isolation, including for any non-HTTP listeners.
 
-## Published container
+Copy `.env.example` to `.env` in this directory and keep it private. Set
+`VERSION` to the version in `VERSION`, generate two distinct random secrets
+of at least 32 characters for `SECRET_ADMIN_SECRET` and
+`SECRET_SERVICE_CREDENTIAL`, and provide the absolute paths for the SecretService
+certificate, private key, CA certificate and persistent database directory.
+The server certificate must include `secretservice` in its DNS subject
+alternative names for Docker and the hostname or IP clients use to reach it.
+The SecretService container runs as UID 65532: the database directory must be
+writable and the certificate and private key readable by that user. Restrict
+the permissions and back up the account database securely.
 
-Pushes to `main` build and test FileServer, then publish AMD64 and ARM64 images
-to `ghcr.io/jacklanger/dmp/fileserver` with `latest` and commit-SHA tags. The
-workflow publishes the image only; it does not automatically update a running
-server. Package visibility is managed in GitHub Packages. If the package is
-private, authenticate Docker to `ghcr.io` with a GitHub token that can read
-the package before pulling.
+Build the FileServer JAR, then run `docker compose up -d --build` from this
+directory. This builds SecretService locally, publishes its TLS port 8443, and
+keeps FileServer on an internal network. Clients use the SecretService origin
+for both account APIs and existing `/files` paths. Configure
+`SECRET_ALLOWED_ORIGINS` for browser clients. For direct runs, set SecretService
+`FILESERVER_UPSTREAM_URL` to the private FileServer HTTP(S) origin and protect
+FileServer using a firewall or an isolated network; starting FileServer with
+`./gradlew bootRun` alone does not provide that protection.
 
-To deploy the published image using the Compose configuration, copy
-`compose.yaml` to the target host, create its `.env` file, then run from the
-directory containing `compose.yaml`:
+Users sign in directly to SecretService using `POST /v1/login`; each FileServer
+request must include `X-User: <username>` and
+`Authorization: Bearer <accessToken>`. Access tokens last 15 minutes; refresh
+and logout are provided by SecretService. The gateway checks each file request
+and responds with 401 for invalid credentials, 503 if validation is unavailable,
+or 502 if FileServer is unavailable. The service credential is private and is
+never sent by users. Trust the SecretService certificate on each client.
 
-```sh
-docker compose up -d --no-build fileserver
-```
+## Published containers
 
-Compose pulls `ghcr.io/jacklanger/dmp/fileserver:latest` if it is not already
-available locally. If the package is private, authenticate Docker to `ghcr.io`
-with a GitHub token that can read the package. To deploy a particular commit,
-set `FILESERVER_IMAGE_TAG` in `.env` to its full commit SHA. These commands
-retain the existing data and Caddy volumes.
+Pushes to `main` build and test FileServer and SecretService, then publish AMD64
+and ARM64 images to `ghcr.io/jacklanger/dmp/fileserver` and
+`ghcr.io/jacklanger/dmp/secretservice`, respectively, with `latest` and
+commit-SHA tags. The workflows publish images only; they do not automatically
+update a running server. Package visibility is managed in GitHub Packages. If
+either package is private, authenticate Docker to `ghcr.io` with a GitHub token
+that can read the package before pulling.
+
+Compose uses the published images with `--no-build`. Set `FILESERVER_IMAGE_TAG`
+and `SECRETSERVICE_IMAGE_TAG` to select tags; both default to `latest`. Keep
+the persistent data and Caddy volumes when updating.
 
 Metadata is stored in SQLite at `data/metadata.db` relative to the application
 working directory. For a direct run, set the `FILESERVER_DATABASE_PATH`
@@ -54,7 +71,7 @@ Compose orphan; stop it separately after confirming it is no longer needed.
 The optional HTTPS override uses Caddy as a reverse proxy with its own local
 certificate authority (CA). It leaves the default development Compose setup
 unchanged. Use a stable IP address for the Raspberry Pi, such as a DHCP
-reservation, and set `FILESERVER_HTTPS_HOST` in `FileServer/.env` to that IP
+reservation, and set `FILESERVER_HTTPS_HOST` in `.env` to that IP
 address or a local hostname resolving to it. Do not include a scheme or port.
 If you use a hostname, configure DNS or hosts files on each client.
 
@@ -62,20 +79,22 @@ Set `FILE_SERVER_DATA` to an appropriate persistent host directory for the
 database and archives; if unset, it defaults to `./FileServer/data` relative to
 this directory.
 
-Copy both `compose.yaml` and `compose.https.yaml` to the target host and create
-the `.env` file there. No application source files or separate Caddyfile are
-needed. Run from the directory containing both Compose files:
+Provision the SecretService image, certificates, persistent data and `.env` on
+the target host. Run from the directory containing both Compose files:
 
 ```sh
 docker compose -f compose.yaml -f compose.https.yaml up -d --no-build
 ```
 
-Compose pulls the FileServer and Caddy images as needed. This override requires
-Docker Compose 2.24.4 or newer for `!reset` and inline configs. It removes the
-host port mapping for FileServer and exposes Caddy on ports 80 and 443 instead.
-Use `https://<FILESERVER_HTTPS_HOST>` from clients; port 80 redirects to HTTPS.
-Ensure those ports are available and restrict network access with the host
-firewall as appropriate.
+Compose pulls the FileServer, SecretService and Caddy images as needed. This
+override requires Docker Compose 2.24.4 or newer for `!reset` and inline
+configs. It removes the host port mapping for SecretService and exposes Caddy
+on ports 80 and 443.
+Use `https://<FILESERVER_HTTPS_HOST>` for both account and file APIs; port 80
+redirects to HTTPS. Ensure those ports are available and restrict network
+access with the host firewall as appropriate. Caddy verifies SecretService's
+certificate using `SECRET_SERVICE_CA`; the certificate must include
+`secretservice` in its DNS subject alternative names.
 
 Caddy stores its CA and certificates in the `caddy_data` Docker volume. After
 startup, export its **public root certificate** on the Pi:
@@ -144,38 +163,37 @@ ZIP strategy registered when adding formats so previously stored files remain
 accessible. The current HTTP upload and download APIs still represent individual
 files; directory ingestion and browsing require separate API support.
 
-Uploads require `file` and JSON `metadata` multipart parts. The HTTP server
-requires authentication and CSRF protection; restart it after configuration
-changes. Multipart file parts are limited to 100 MiB by default; set
+Uploads require `file` and JSON `metadata` multipart parts. The gateway
+requires the user and bearer token headers; cookie sessions and CSRF tokens
+are not used. Metadata must include `fileType`: `FILE`, `DIRECTORY`, or
+`ARCHIVE` (case-insensitive). These are classifications, not MIME types;
+existing metadata and in-progress transfers are migrated as `FILE`. Multipart
+file parts are limited to 100 MiB by default; set
 `FILESERVER_MULTIPART_MAX_DISK_USAGE_PER_PART` (for example, `1GB`) to change
-the limit. Compose and Gradle `:FileServer:bootRun` also read it from
-`FileServer/.env`; set it in the run configuration for direct IDE runs. The
+the limit. Compose and Gradle `bootRun` also read it from
+`.env`; set it in the run configuration for direct IDE runs. The
 disk limit must be at least the multipart in-memory threshold (256 KiB by
 default). Multipart requests exceeding a size limit receive HTTP 413.
 The former SOAP starter was removed because it selected Spring MVC;
 there are currently no SOAP endpoints in FileServer.
 
-The DMP desktop client connects to the FileServer API from its Tauri webview.
-CORS is enabled for the local Vite origin and Tauri desktop origins by default.
-For another frontend origin, set `FILESERVER_CORS_ALLOWED_ORIGINS` to a
-comma-separated list of exact origins (for example,
-`https://portal.example.com`). Keep this list limited to trusted frontends; the
-client uses HTTP Basic authentication and a CSRF token for uploads.
-
-The server sends `Referrer-Policy: strict-origin-when-cross-origin` so browser
-form logins include their same-origin `Origin` header. This policy allows full
-referrer URLs on same-origin requests and only the origin on cross-origin
-requests; HTTPS-to-HTTP requests omit the referrer. Reverse proxies must not
-override it with `no-referrer`, which can cause login to be rejected by CORS.
+CORS is handled by SecretService. Set `SECRET_ALLOWED_ORIGINS` to a
+comma-separated list of exact trusted frontend origins (for example,
+`https://portal.example.com`); the Compose example lists local Vite and Tauri
+origins. Point the portal's FileServer URL to the gateway HTTPS origin.
+The portal's download function accepts an access token, but the portal does not
+yet provide a sign-in UI or refresh flow. Use the API or scripts until those
+client features are implemented. The legacy portal configuration still has a
+password field; FileServer no longer uses it.
 
 ## Resumable transfers
 
-See [TRANSFER-API.md](../docs/FileServer/TRANSFER-API.md) for the complete protocol and a Node.js
+See [TRANSFER-API.md](../wiki/FileServer/TRANSFER-API.md) for the complete protocol and a Node.js
 upload and resume example.
 
 For uploads that may be interrupted, create a session with
 `POST /files/transfers` and JSON containing `filename`, `size`, `sha256`
-(hexadecimal SHA-256 of the complete file), `description`, and `tags`. The
+(hexadecimal SHA-256 of the complete file), `description`, `fileType`, and `tags`. The
 response includes a stable `transferId`, `offset`, `length`, and `expiresAt`.
 Persist the transfer ID on the client and query `GET` or `HEAD
 /files/transfers/{transferId}` after reconnecting to recover the current
@@ -186,10 +204,17 @@ PowerShell (or `powershell -File scripts\create-transfer.ps1 <file>` in cmd).
 It creates a session, prints its transfer ID, uploads chunks, and completes
 the transfer. To resume an interrupted upload, run the same command with
 `-TransferId <id>`; use the same local file, whose checksum is verified when
-the transfer completes. The script uses `scripts\fileserver.netrc` for HTTP
-credentials. The Bash script `bash scripts/create-transfer.sh <file>` requires
+the transfer completes. Set `FILESERVER_USER` and `FILESERVER_ACCESS_TOKEN`
+in the environment before running the scripts. Tokens expire after 15 minutes;
+if a transfer outlasts its token, obtain a new one and resume with the transfer
+ID. The Bash script `bash scripts/create-transfer.sh <file>` requires
 Python 3.8 or later and currently only creates a session; send its chunks and
 complete it separately.
+
+The scripts default to `https://localhost:8443`. Set `FILESERVER_URL` for the
+Bash scripts and `post-upload.ps1`, or pass `-ServerUrl` to
+`create-transfer.ps1`, to use another gateway origin. Configure the client
+system or curl to trust the gateway's CA before using them.
 
 Send chunks as `PATCH /files/transfers/{transferId}` with
 `Content-Type: application/octet-stream` and a `Content-Range` header such as

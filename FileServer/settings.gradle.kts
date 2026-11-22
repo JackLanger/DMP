@@ -5,6 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "DMP"
-
-include("FileServer")
+rootProject.name = "FileServer"

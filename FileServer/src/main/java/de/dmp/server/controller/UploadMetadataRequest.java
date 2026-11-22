@@ -3,6 +3,7 @@ package de.dmp.server.controller;
 
 import java.util.Set;
 import java.util.UUID;
+import com.fasterxml.jackson.annotation.JsonAlias;
 
 
 /**
@@ -15,6 +16,7 @@ import java.util.UUID;
 public record UploadMetadataRequest(
     UUID uuid,
     String description,
+	@JsonAlias("filetype") String fileType,
     Set<String> tags
 ) {
 }

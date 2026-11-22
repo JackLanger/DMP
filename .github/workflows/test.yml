@@ -19,10 +19,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secretservice:
+    name: SecretService tests
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: SecretService
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: SecretService/go.mod
+          cache-dependency-path: SecretService/go.sum
+      - run: go test -race ./...
+      - run: go vet ./...
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build SecretService image
+        uses: docker/build-push-action@v6
+        with:
+          context: SecretService
+          file: SecretService/Containerfile
+          push: false
+
   fileserver:
     name: FileServer tests
     #runs-on: ubuntu-latest
     runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: FileServer
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -30,24 +56,25 @@ jobs:
           distribution: temurin
           java-version: '26'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :FileServer:test
+      - run: ./gradlew test
 
   portal:
-    name: Portal tests
+    name: Portal checks
     #runs-on: ubuntu-latest
     runs-on: self-hosted
     defaults:
       run:
-        working-directory: Portal
+        working-directory: portal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: Portal/package-lock.json
+          cache-dependency-path: portal/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - run: npm ci
-      - run: npm test
+      - run: npm run lint
+      - run: npm run build

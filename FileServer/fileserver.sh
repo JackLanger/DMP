@@ -1,24 +1,21 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 function build() {
-
-  pushd ..
-  ./gradlew :FileServer:build
-  popd
+  (cd "$SCRIPT_DIR" && ./gradlew build) || return
 
   local version
   version="$(<"$SCRIPT_DIR/VERSION")"
 
-  "$PROJECT_ROOT/gradlew" -p "$PROJECT_ROOT" :FileServer:bootJar
+  (cd "$SCRIPT_DIR" && ./gradlew bootJar) || return
   docker build \
     --build-arg "VERSION=$version" \
     -t fileserver:latest \
     -t "fileserver:$version" \
     -f "$SCRIPT_DIR/FileServer.Containerfile" \
-    "$PROJECT_ROOT"
+    "$REPOSITORY_ROOT"
 }
 
 function run() {
@@ -26,9 +23,7 @@ function run() {
   # Compose resolves .env and relative paths from the working directory
   cd "$SCRIPT_DIR" || return 1
 
-  pushd ..
-  ./gradlew :FileServer:build
-  popd
+  (cd "$SCRIPT_DIR" && ./gradlew build) || return
 
   if command -v docker-compose >/dev/null 2>&1; then
     docker-compose -f compose.yaml up --remove-orphans -d

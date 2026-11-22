@@ -1,5 +1,7 @@
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -10,6 +12,7 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "create-transfer.ps1"
+POWERSHELL = shutil.which("powershell") or shutil.which("pwsh")
 
 
 class TransferHandler(BaseHTTPRequestHandler):
@@ -28,12 +31,19 @@ class TransferHandler(BaseHTTPRequestHandler):
         return self.rfile.read(int(self.headers.get("Content-Length", "0")))
 
     def do_GET(self):
-        if self.path == "/login":
-            self.reply(200, b'<input name="_csrf" value="token">')
-        else:
-            self.reply(200, json.dumps(self.server.status()).encode())
+        if not self.authenticated():
+            return
+        self.reply(200, json.dumps(self.server.status()).encode())
+
+    def authenticated(self):
+        if self.headers.get("X-User") != "test" or self.headers.get("Authorization") != "Bearer " + "a" * 43:
+            self.reply(401)
+            return False
+        return True
 
     def do_POST(self):
+        if not self.authenticated():
+            return
         if self.path == "/files/transfers":
             self.server.request = json.loads(self.read_body())
             self.server.data = bytearray()
@@ -48,6 +58,8 @@ class TransferHandler(BaseHTTPRequestHandler):
             self.reply(200, json.dumps({"documentId": self.server.id}).encode())
 
     def do_PATCH(self):
+        if not self.authenticated():
+            return
         body = self.read_body()
         if self.server.fail_at_offset == len(self.server.data):
             self.server.fail_at_offset = None
@@ -87,8 +99,6 @@ class CreateTransferTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.netrc = self.root / "netrc"
-        self.netrc.write_text("machine 127.0.0.1 login test password test\n")
         self.server = TransferServer()
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -101,9 +111,10 @@ class CreateTransferTest(unittest.TestCase):
 
     def run_script(self, path, *args):
         return subprocess.run(
-            ["powershell", "-NoProfile", "-File", str(SCRIPT), str(path),
+            [POWERSHELL or "powershell", "-NoProfile", "-File", str(SCRIPT), str(path),
              "-ServerUrl", f"http://127.0.0.1:{self.server.server_port}",
-             "-NetrcPath", str(self.netrc), *args],
+             *args],
+            env={**os.environ, "FILESERVER_USER": "test", "FILESERVER_ACCESS_TOKEN": "a" * 43},
             capture_output=True, text=True, timeout=30,
         )
 
@@ -116,6 +127,7 @@ class CreateTransferTest(unittest.TestCase):
         self.assertEqual(self.server.data, data)
         self.assertEqual(self.server.chunk_sizes, [262144, 262144, 256])
         self.assertTrue(self.server.completed)
+        self.assertEqual(self.server.request["fileType"], "FILE")
         self.assertIn(self.server.id, result.stdout)
 
     def test_resumes_after_failure(self):

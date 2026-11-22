@@ -9,7 +9,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
-
 @Getter
 @Setter
 public class Metadata {
@@ -19,6 +18,8 @@ public class Metadata {
   private UUID id;
 
   private String name;
+
+  private FileType type;
 
   private String description;
 

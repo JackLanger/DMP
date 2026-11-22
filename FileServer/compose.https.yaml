@@ -1,8 +1,6 @@
 services:
-  fileserver:
+  secretservice:
     ports: !reset [ ]
-    environment:
-      - 'SERVER_FORWARD_HEADERS_STRATEGY=framework'
 
   caddy:
     image: caddy:2
@@ -17,8 +15,11 @@ services:
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      - "${SECRET_SERVICE_CA:?Set SECRET_SERVICE_CA to the CA certificate path}:/run/secrets/secret-service-ca.crt:ro"
+    networks:
+      - frontend
     depends_on:
-      - fileserver
+      - secretservice
 
 volumes:
   caddy_data:
@@ -33,5 +34,9 @@ configs:
 
       https://{$$FILESERVER_HTTPS_HOST} {
         tls internal
-        reverse_proxy fileserver:8080
+        reverse_proxy https://secretservice:8443 {
+          transport http {
+            tls_trust_pool file /run/secrets/secret-service-ca.crt
+          }
+        }
       }

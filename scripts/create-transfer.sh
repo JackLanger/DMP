@@ -6,11 +6,20 @@ if [[ $# -ne 1 || ! -f $1 ]]; then
   exit 1
 fi
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-cookies=$(mktemp)
+if [[ -z ${FILESERVER_USER:-} || -z ${FILESERVER_ACCESS_TOKEN:-} ]]; then
+  echo "Set FILESERVER_USER and FILESERVER_ACCESS_TOKEN from SecretService." >&2
+  exit 1
+fi
+if [[ ! $FILESERVER_USER =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,63}$ || ! $FILESERVER_ACCESS_TOKEN =~ ^[a-zA-Z0-9_-]{43}$ ]]; then
+  echo "Invalid FILESERVER_USER or FILESERVER_ACCESS_TOKEN." >&2
+  exit 1
+fi
+auth_headers=$(mktemp)
+chmod 600 "$auth_headers"
+printf 'X-User: %s\nAuthorization: Bearer %s\n' "$FILESERVER_USER" "$FILESERVER_ACCESS_TOKEN" > "$auth_headers"
 request_file=
 cleanup() {
-  rm -f -- "$cookies"
+  rm -f -- "$auth_headers"
   if [[ -n $request_file ]]; then rm -f -- "$request_file"; fi
 }
 trap cleanup EXIT
@@ -39,18 +48,10 @@ with open(path, "rb") as source:
         size += len(chunk)
         digest.update(chunk)
 json.dump({"filename": os.path.basename(path), "size": size, "sha256": digest.hexdigest(),
-           "description": "Test upload", "tags": ["test"]}, sys.stdout)
+           "description": "Test upload", "fileType": "FILE", "tags": ["test"]}, sys.stdout)
 PY
 
-csrf=$(curl -fsS -c "$cookies" http://localhost:8080/login \
-  | sed -n 's/.*name="_csrf".*value="\([^"]*\)".*/\1/p')
-if [[ -z $csrf ]]; then
-  echo "CSRF token not found in the login page." >&2
-  exit 1
-fi
-
-curl -fsS -i --netrc-file "$script_dir/fileserver.netrc" -b "$cookies" \
-  -H "X-CSRF-TOKEN: $csrf" \
+curl -fsS -i -H "@$auth_headers" \
   -H "Content-Type: application/json" \
   --data-binary "@$request_file" \
-  http://localhost:8080/files/transfers
+  "${FILESERVER_URL:-https://localhost:8443}/files/transfers"
