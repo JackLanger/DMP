@@ -9,14 +9,14 @@ import (
 )
 
 func LoadEnvironment() error {
-	path, err := environmentFilePath(".")
+	path, err := EnvironmentFilePath(".")
 	if err != nil {
 		return err
 	}
-	return loadEnvironmentFile(path)
+	return LoadEnvironmentFile(path)
 }
 
-func environmentFilePath(workingDirectory string) (string, error) {
+func EnvironmentFilePath(workingDirectory string) (string, error) {
 	path := filepath.Join(workingDirectory, ".env")
 	serviceDirectory := filepath.Join(workingDirectory, "SecretService")
 	if info, err := os.Stat(serviceDirectory); err == nil && info.IsDir() {
@@ -27,7 +27,7 @@ func environmentFilePath(workingDirectory string) (string, error) {
 	return path, nil
 }
 
-func loadEnvironmentFile(path string) error {
+func LoadEnvironmentFile(path string) error {
 	values, err := godotenv.Read(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
