@@ -12,10 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	core "go-core"
+
 	"github.com/JackLanger/DMP/SecretService/internal/api"
 	"github.com/JackLanger/DMP/SecretService/internal/store"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 }
 
 func run() error {
-	if err := loadEnvironment(); err != nil {
+	if err := core.LoadEnvironment(); err != nil {
 		return err
 	}
 	admin := os.Getenv("SECRET_ADMIN_SECRET")
@@ -72,7 +73,7 @@ func run() error {
 	}
 	server := &http.Server{
 		Addr:              address,
-		Handler:           withCORS(handler, origins),
+		Handler:           core.WithCORS(handler, origins),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -102,76 +103,6 @@ func run() error {
 		defer cancel()
 		if err := server.Shutdown(shutdown); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-func withCORS(handler http.Handler, origins map[string]bool) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		if r.TLS != nil {
-			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		}
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			w.Header().Add("Vary", "Origin")
-			if !origins[origin] {
-				http.Error(w, "origin not allowed", http.StatusForbidden)
-				return
-			}
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-User, Content-Range, Range, If-Range")
-			w.Header().Set("Access-Control-Expose-Headers", "Content-Disposition, Content-Range, Accept-Ranges, ETag, Upload-Offset, Upload-Length, Upload-Expires, Location")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		handler.ServeHTTP(w, r)
-	})
-}
-
-func loadEnvironment() error {
-	path, err := environmentFilePath(".")
-	if err != nil {
-		return err
-	}
-	return loadEnvironmentFile(path)
-}
-
-func environmentFilePath(workingDirectory string) (string, error) {
-	path := filepath.Join(workingDirectory, ".env")
-	serviceDirectory := filepath.Join(workingDirectory, "SecretService")
-	if info, err := os.Stat(serviceDirectory); err == nil && info.IsDir() {
-		path = filepath.Join(serviceDirectory, ".env")
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", errors.New("cannot locate SecretService configuration directory")
-	}
-	return path, nil
-}
-
-func loadEnvironmentFile(path string) error {
-	values, err := godotenv.Read(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		var pathError *os.PathError
-		if errors.As(err, &pathError) {
-			return errors.New("cannot read SecretService .env file")
-		}
-		return errors.New("invalid SecretService .env file")
-	}
-	for name, value := range values {
-		if _, exists := os.LookupEnv(name); !exists {
-			if err := os.Setenv(name, value); err != nil {
-				return errors.New("cannot load SecretService .env file")
-			}
 		}
 	}
 	return nil
