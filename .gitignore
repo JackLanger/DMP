@@ -35,5 +35,5 @@ out/
 
 ### VS Code ###
 .vscode/
-
+**/devcontainer-lock.json
 ### Kotlin ###
