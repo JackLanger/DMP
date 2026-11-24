@@ -14,6 +14,9 @@ RUN apt-get update \
         libxdo-dev \
         patchelf \
         pkg-config \
+        python3 \
+        python3-pip \
+        python3-venv \
         sudo \
         unzip \
         wget \
