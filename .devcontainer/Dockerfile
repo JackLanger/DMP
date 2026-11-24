@@ -1,4 +1,4 @@
-FROM node:24-bookworm
+FROM node:22-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -6,6 +6,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         file \
+        git \
         libayatana-appindicator3-dev \
         librsvg2-dev \
         libssl-dev \
@@ -14,7 +15,10 @@ RUN apt-get update \
         patchelf \
         pkg-config \
         sudo \
+        unzip \
         wget \
+        zip \
+        openjdk-26-jdk \
     && rm -rf /var/lib/apt/lists/* \
     && echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 

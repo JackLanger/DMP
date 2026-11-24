@@ -1,21 +1,27 @@
 {
-  "name": "DMP xclient (Tauri 2)",
+  "name": "DMP",
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.26.10"
+    },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "26",
+      "jdkDistro": "tem"
+    }
+  },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/dmp,type=bind",
-  "workspaceFolder": "/workspaces/dmp/Portal/dmp.xclient",
-  "mounts": [
-    "source=dmp-portal-node-modules,target=/workspaces/dmp/Portal/node_modules,type=volume",
-    "source=dmp-frontend-node-modules,target=/workspaces/dmp/Portal/dmp.frontend/node_modules,type=volume",
-    "source=dmp-server-node-modules,target=/workspaces/dmp/Portal/dmp.server/node_modules,type=volume",
-    "source=dmp-xclient-node-modules,target=/workspaces/dmp/Portal/dmp.xclient/node_modules,type=volume"
-  ],
+  "workspaceFolder": "/workspaces/dmp",
   "remoteUser": "node",
-  "postCreateCommand": "sudo chown node:node ../node_modules ../dmp.frontend/node_modules ../dmp.server/node_modules node_modules && npm ci --prefix ..",
+  "postCreateCommand": "npm ci --prefix portal",
   "customizations": {
     "vscode": {
       "extensions": [
+        "golang.go",
+        "vscjava.vscode-java-debug",
+        "vscjava.vscode-java-pack",
         "rust-lang.rust-analyzer",
         "tauri-apps.tauri-vscode"
       ]

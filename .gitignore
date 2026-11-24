@@ -21,6 +21,9 @@ bin/
 *.iml
 *.ipr
 out/
+**/bin/
+**/target/
+**/Cargo.lock
 !**/src/main/**/out/
 !**/src/test/**/out/
 
