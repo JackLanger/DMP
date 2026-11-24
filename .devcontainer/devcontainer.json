@@ -1,8 +1,12 @@
+
 {
   "name": "DMP",
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "runArgs": [
+    "--tmpfs=/tmp:rw,exec,nosuid,nodev,mode=1777"
+  ],
   "features": {
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.26.10"
@@ -15,7 +19,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/dmp,type=bind",
   "workspaceFolder": "/workspaces/dmp",
   "remoteUser": "node",
-  "postCreateCommand": "npm ci --prefix portal",
+  "postStartCommand": "sudo chmod 1777 /tmp",
   "customizations": {
     "vscode": {
       "extensions": [
