@@ -21,7 +21,6 @@ RUN apt-get update \
         unzip \
         wget \
         zip \
-        openjdk-26-jdk \
     && rm -rf /var/lib/apt/lists/* \
     && echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 
