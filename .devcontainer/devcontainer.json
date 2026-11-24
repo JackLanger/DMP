@@ -17,6 +17,9 @@
     }
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/dmp,type=bind",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,readonly"
+  ],
   "workspaceFolder": "/workspaces/dmp",
   "remoteUser": "node",
   "postStartCommand": "sudo chmod 1777 /tmp",
