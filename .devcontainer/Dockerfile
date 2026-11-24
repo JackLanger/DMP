@@ -23,7 +23,7 @@ RUN apt-get update \
         zip \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /tmp/.X11-unix \
-    && chmod 1777 /tmp/.X11-unix \
+    && chmod 1777  -R /tmp/ \
     && echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node
 
 USER node
