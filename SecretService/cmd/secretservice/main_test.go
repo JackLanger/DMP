@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	core "go-core"
 )
 
 func TestLoadEnvironmentFile(t *testing.T) {
@@ -23,7 +25,7 @@ func TestLoadEnvironmentFile(t *testing.T) {
 	t.Setenv("DMP_TEST_DOTENV_EXISTING", "from-environment")
 	t.Setenv("DMP_TEST_DOTENV_EMPTY", "")
 
-	if err := loadEnvironmentFile(path); err != nil {
+	if err := core.LoadEnvironmentFile(path); err != nil {
 		t.Fatal(err)
 	}
 	if got := os.Getenv("DMP_TEST_DOTENV_VALUE"); got != "value with spaces" {
@@ -44,7 +46,7 @@ func TestEnvironmentFilePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, directory := range []string{root, service} {
-		got, err := environmentFilePath(directory)
+		got, err := core.EnvironmentFilePath(directory)
 		if err != nil || got != filepath.Join(service, ".env") {
 			t.Fatalf("path for %s = %s, error %v", directory, got, err)
 		}
@@ -53,7 +55,7 @@ func TestEnvironmentFilePath(t *testing.T) {
 
 func TestLoadEnvironmentFileErrors(t *testing.T) {
 	dir := t.TempDir()
-	if err := loadEnvironmentFile(filepath.Join(dir, "missing.env")); err != nil {
+	if err := core.LoadEnvironmentFile(filepath.Join(dir, "missing.env")); err != nil {
 		t.Fatalf("missing file: %v", err)
 	}
 
@@ -61,16 +63,16 @@ func TestLoadEnvironmentFileErrors(t *testing.T) {
 	if err := os.WriteFile(path, []byte("SECRET=\"unterminated\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := loadEnvironmentFile(path); err == nil || err.Error() != "invalid SecretService .env file" {
+	if err := core.LoadEnvironmentFile(path); err == nil || err.Error() != "invalid SecretService .env file" {
 		t.Fatalf("invalid file: %v", err)
 	}
-	if err := loadEnvironmentFile(dir); err == nil || err.Error() != "cannot read SecretService .env file" {
+	if err := core.LoadEnvironmentFile(dir); err == nil || err.Error() != "cannot read SecretService .env file" {
 		t.Fatalf("unreadable file: %v", err)
 	}
 }
 
 func TestCORSForTransfers(t *testing.T) {
-	handler := withCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := core.WithCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}), map[string]bool{"https://app.example": true})
 	r := httptest.NewRequest("OPTIONS", "/files/transfers/id", nil)

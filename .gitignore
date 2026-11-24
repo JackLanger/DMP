@@ -21,6 +21,9 @@ bin/
 *.iml
 *.ipr
 out/
+**/bin/
+**/target/
+**/Cargo.lock
 !**/src/main/**/out/
 !**/src/test/**/out/
 
@@ -32,5 +35,5 @@ out/
 
 ### VS Code ###
 .vscode/
-
+**/devcontainer-lock.json
 ### Kotlin ###

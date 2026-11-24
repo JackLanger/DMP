@@ -1,23 +1,58 @@
+
 {
-  "name": "DMP xclient (Tauri 2)",
+  "name": "DMP",
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/dmp,type=bind",
-  "workspaceFolder": "/workspaces/dmp/Portal/dmp.xclient",
-  "mounts": [
-    "source=dmp-portal-node-modules,target=/workspaces/dmp/Portal/node_modules,type=volume",
-    "source=dmp-frontend-node-modules,target=/workspaces/dmp/Portal/dmp.frontend/node_modules,type=volume",
-    "source=dmp-server-node-modules,target=/workspaces/dmp/Portal/dmp.server/node_modules,type=volume",
-    "source=dmp-xclient-node-modules,target=/workspaces/dmp/Portal/dmp.xclient/node_modules,type=volume"
+  "runArgs": [
+    "--tmpfs=/tmp:rw,exec,nosuid,nodev,mode=1777"
   ],
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.26.10"
+    },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "26",
+      "jdkDistro": "tem"
+    }
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/dmp,type=bind",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,readonly"
+  ],
+  "workspaceFolder": "/workspaces/dmp",
   "remoteUser": "node",
-  "postCreateCommand": "sudo chown node:node ../node_modules ../dmp.frontend/node_modules ../dmp.server/node_modules node_modules && npm ci --prefix ..",
+  "postStartCommand": "sudo chmod 1777 /tmp",
   "customizations": {
     "vscode": {
       "extensions": [
+        "akamud.vscode-theme-onedark",
+        "alexcvzz.vscode-sqlite",
+        "atommaterial.a-file-icon-vscode",
+        "github.github-vscode-theme",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "golang.go",
+        "ms-azuretools.vscode-containers",
+        "ms-azuretools.vscode-docker",
+        "ms-vscode-remote.remote-containers",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpp-devtools",
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cpptools-themes",
+        "ms-vscode.vscode-typescript-next",
+        "pkief.material-icon-theme",
+        "qwtel.sqlite-viewer",
+        "redhat.java",
         "rust-lang.rust-analyzer",
-        "tauri-apps.tauri-vscode"
+        "tamasfe.even-better-toml",
+        "vscjava.vscode-gradle",
+        "vscjava.vscode-java-debug",
+        "vscjava.vscode-java-dependency",
+        "vscjava.vscode-java-pack",
+        "vscjava.vscode-java-test",
+        "vscjava.vscode-maven"
       ]
     }
   }

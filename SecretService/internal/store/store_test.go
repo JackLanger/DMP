@@ -57,6 +57,10 @@ func TestTokenLifecycle(t *testing.T) {
 	if err != nil || principal.UserID != id {
 		t.Fatalf("valid token: %+v, %v", principal, err)
 	}
+	principal, err = s.ValidateToken(ctx, tokens.AccessToken)
+	if err != nil || principal.UserID != id {
+		t.Fatalf("valid token without username: %+v, %v", principal, err)
+	}
 	if _, err := s.Validate(ctx, "other", tokens.AccessToken); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("wrong user accepted: %v", err)
 	}
@@ -70,6 +74,9 @@ func TestTokenLifecycle(t *testing.T) {
 	now = now.Add(accessLifetime)
 	if _, err := s.Validate(ctx, "alice", tokens.AccessToken); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("expired access token accepted: %v", err)
+	}
+	if _, err := s.ValidateToken(ctx, tokens.AccessToken); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("expired token without username accepted: %v", err)
 	}
 	rotated, err := s.Refresh(ctx, "alice", tokens.RefreshToken)
 	if err != nil {
